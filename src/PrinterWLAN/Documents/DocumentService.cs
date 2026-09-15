@@ -35,7 +35,11 @@ public sealed class DocumentService(AppPaths paths, AppDatabase database, IWordC
             conversion.Stop();
             var conversionDurationMs = extension == ".pdf" ? 0 : (long)conversion.Elapsed.TotalMilliseconds;
             int pageCount;
-            try { pageCount = Conversion.GetPageCount(pdfPath); }
+            try
+            {
+                await using var pdf = File.OpenRead(pdfPath);
+                pageCount = Conversion.GetPageCount(pdf);
+            }
             catch (Exception exception)
             {
                 logger.LogError(exception, "PDFium could not read uploaded {Extension} document {DocumentId}", extension, id);

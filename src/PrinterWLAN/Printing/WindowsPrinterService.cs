@@ -71,11 +71,13 @@ public sealed class WindowsPrinterService(ILogger<WindowsPrinterService> logger)
         printDocument.PrintPage += (_, args) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            using var bitmap = Conversion.ToImage(document.PdfPath, request.SelectedPages[pageIndex] - 1);
+            using var renderInput = File.OpenRead(document.PdfPath);
+            using var bitmap = Conversion.ToImage(renderInput, request.SelectedPages[pageIndex] - 1);
             using var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 100);
             using var stream = encoded.AsStream();
             using var image = Image.FromStream(stream);
-            var pdfSize = Conversion.GetPageSize(document.PdfPath, request.SelectedPages[pageIndex] - 1);
+            using var sizeInput = File.OpenRead(document.PdfPath);
+            var pdfSize = Conversion.GetPageSize(sizeInput, request.SelectedPages[pageIndex] - 1);
             var actualWidth = Math.Max(1, (int)Math.Round(pdfSize.Width / 72d * 100d));
             var actualHeight = Math.Max(1, (int)Math.Round(pdfSize.Height / 72d * 100d));
             var target = CalculateTarget(args.MarginBounds, image.Width, image.Height, request, actualWidth, actualHeight);

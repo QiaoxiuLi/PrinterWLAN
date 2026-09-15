@@ -13,7 +13,11 @@ public sealed class LoggingAndPrintingTests
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "SocialPreview.pdf");
         Assert.True(File.Exists(path), $"Missing pinned PDF fixture: {path}");
-        Assert.True(Conversion.GetPageCount(path) > 0);
+        using var countInput = File.OpenRead(path);
+        Assert.True(Conversion.GetPageCount(countInput) > 0);
+        using var renderInput = File.OpenRead(path);
+        using var bitmap = Conversion.ToImage(renderInput, 0);
+        Assert.True(bitmap.Width > 0 && bitmap.Height > 0);
     }
 
     [Theory]
