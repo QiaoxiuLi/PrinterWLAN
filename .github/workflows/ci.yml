@@ -62,6 +62,15 @@ jobs:
           $file='artifacts/installer/PrinterWLAN-Setup-x64.exe'
           $hash=(Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  PrinterWLAN-Setup-x64.exe" | Set-Content "$file.sha256" -Encoding ascii
+      - name: Collect diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $source='C:\ProgramData\PrinterWLAN\Diagnostics'
+          if (Test-Path $source) {
+            New-Item -ItemType Directory -Force -Path 'artifacts/diagnostics' | Out-Null
+            Copy-Item "$source\*" 'artifacts/diagnostics' -Recurse -Force
+          }
       - uses: actions/upload-artifact@v5
         if: always()
         with:
@@ -71,5 +80,5 @@ jobs:
             artifacts/installer/PrinterWLAN-Setup-x64.exe.sha256
             **/TestResults/*.trx
             tests/PrinterWLAN.UiTests/playwright-report/
-            C:/ProgramData/PrinterWLAN/Diagnostics/
+            artifacts/diagnostics/
           if-no-files-found: warn

@@ -3,8 +3,8 @@ import { test, expect } from '@playwright/test';
 const adminPassword=process.env.PRINTERWLAN_ADMIN_PASSWORD||'';
 const userPassword=process.env.PRINTERWLAN_TEST_USER_PASSWORD||'';
 
-async function adminLogin(page){await page.goto('/');await page.getByRole('button',{name:'管理员登录'}).click();await page.getByLabel('管理员密码').fill(adminPassword);await page.getByRole('button',{name:'登录'}).click();await expect(page.getByText('使用记录',{exact:true}).first()).toBeVisible()}
-async function userLogin(page){await page.goto('/');await page.getByLabel('用户名').fill('测试用户');await page.getByLabel('密码').fill(userPassword);await page.getByRole('button',{name:'登录'}).click();await expect(page.getByRole('heading',{name:'打印文件'})).toBeVisible()}
+async function adminLogin(page){await page.goto('/');await page.getByRole('button',{name:'管理员登录'}).click();await page.getByLabel('管理员密码').fill(adminPassword);await page.getByRole('button',{name:'登录',exact:true}).click();await expect(page.getByText('使用记录',{exact:true}).first()).toBeVisible()}
+async function userLogin(page){await page.goto('/');await page.getByLabel('用户名').fill('测试用户');await page.getByLabel('密码').fill(userPassword);await page.getByRole('button',{name:'登录',exact:true}).click();await expect(page.getByRole('heading',{name:'打印文件'})).toBeVisible()}
 
 test.describe.serial('PrinterWLAN UI',()=>{
   for(const width of [320,360,390,768,1366,1920])test(`login layout ${width}px`,async({page})=>{await page.setViewportSize({width,height:width<500?800:900});await page.goto('/');await expect(page.getByRole('button',{name:'管理员登录'})).toBeVisible();const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);expect(overflow).toBeLessThanOrEqual(1);const buttons=await page.locator('button').all();for(const button of buttons){const box=await button.boundingBox();if(box)expect(box.width).toBeGreaterThan(38)}});
