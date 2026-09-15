@@ -4,7 +4,7 @@
 
 ## 平台、安装与运行
 
-- [ ] Windows Server 2025 workflow 通过
+- [x] Windows Server 2025 workflow 通过
 - [x] `net10.0-windows`、`win-x64` self-contained publish
 - [x] 真正的 `PrinterWLAN` Windows Service，Automatic、LocalSystem
 - [x] Windows 启动时无需管理员登录即可启动网站
