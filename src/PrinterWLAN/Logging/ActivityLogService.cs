@@ -187,6 +187,7 @@ public sealed class ActivityLogService(AppPaths paths, AppDatabase appDatabase, 
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
+            SqliteConnection.ClearAllPools();
             foreach (var file in Directory.EnumerateFiles(paths.Logs, "PrinterWLAN_*")) File.Delete(file);
             if (Directory.Exists(paths.Cache))
             {

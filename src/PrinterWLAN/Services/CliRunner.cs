@@ -13,7 +13,7 @@ public static class CliRunner
 {
     public static async Task<int?> TryRunAsync(string[] args)
     {
-        if (args.Length == 0 || args[0].StartsWith("--PrinterWLAN:", StringComparison.OrdinalIgnoreCase)) return null;
+        if (args.Length == 0) return null;
         if (args[0].Equals("pwd", StringComparison.OrdinalIgnoreCase))
         {
             if (args.Length != 2)
@@ -63,6 +63,9 @@ public static class CliRunner
             Console.WriteLine("PrinterWLAN 管理命令\n  printerwlan status\n  printerwlan pwd \"你的密码\"");
             return 0;
         }
+        // ASP.NET Core and Windows Service hosting pass configuration switches here.
+        // Only the explicit management verbs above belong to this CLI dispatcher.
+        if (args[0].StartsWith('-')) return null;
         Console.Error.WriteLine("未知命令。可用命令：status、pwd");
         return 2;
     }

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Data.Sqlite;
 using PrinterWLAN.Authentication;
 using PrinterWLAN.Logging;
 using PrinterWLAN.Models;
@@ -75,6 +76,7 @@ public sealed class DatabaseBehaviorTests : IDisposable
 
     public void Dispose()
     {
+        SqliteConnection.ClearAllPools();
         Environment.SetEnvironmentVariable("PRINTERWLAN_DATA_DIR", null);
         if (Directory.Exists(_directory)) Directory.Delete(_directory, true);
     }
