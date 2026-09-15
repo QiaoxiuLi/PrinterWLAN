@@ -13,6 +13,12 @@
       "version": "26.8.0",
       "url": "https://download.documentfoundation.org/libreoffice/stable/26.8.0/win/x86_64/LibreOffice_26.8.0_Win_x86-64.msi",
       "sha256": "4aa6c6e1895f4055104effcb556bd3362d20c6ad707c149543304f395ef9db95"
+    },
+    {
+      "name": "PDFium Windows x64 upstream redistribution archive",
+      "version": "152.0.7961",
+      "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F7961/pdfium-win-x64.tgz",
+      "sha256": "88276459349b291c41f10422dad0210f007c04d919c8fa56472b6b7c6406adf4"
     }
   ],
   "nuget": {

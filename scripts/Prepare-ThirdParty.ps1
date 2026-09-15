@@ -33,6 +33,18 @@ foreach ($folder in @('cmaps','standard_fonts','wasm')) {
 Copy-Item (Join-Path $pdfTemp 'package/LICENSE') (Join-Path $licenses 'PDF.js-Apache-2.0.txt') -Force
 Remove-Item $pdfTemp -Recurse -Force
 
+$pdfium = $manifest.downloads | Where-Object name -Like 'PDFium*'
+$pdfiumArchive = Join-Path $downloads "pdfium-$($pdfium.version)-win-x64.tgz"
+Get-VerifiedFile $pdfium $pdfiumArchive
+$pdfiumTemp = Join-Path $runtime 'pdfium-license-extract'
+if (Test-Path $pdfiumTemp) { Remove-Item $pdfiumTemp -Recurse -Force }
+New-Item -ItemType Directory -Force $pdfiumTemp | Out-Null
+tar -xf $pdfiumArchive -C $pdfiumTemp licenses
+$pdfiumLicenses = Join-Path $licenses 'PDFium'
+if (Test-Path $pdfiumLicenses) { Remove-Item $pdfiumLicenses -Recurse -Force }
+Copy-Item (Join-Path $pdfiumTemp 'licenses') $pdfiumLicenses -Recurse -Force
+Remove-Item $pdfiumTemp -Recurse -Force
+
 if (-not $SkipLibreOffice) {
   $lo = $manifest.downloads | Where-Object name -Like 'LibreOffice*'
   $loMsi = Join-Path $downloads "LibreOffice-$($lo.version)-x64.msi"

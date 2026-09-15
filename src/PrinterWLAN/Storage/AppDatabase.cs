@@ -54,6 +54,8 @@ public sealed class AppDatabase(AppPaths paths)
               document_created_at TEXT NULL,
               document_modified_at TEXT NULL,
               server_received_at TEXT NOT NULL,
+              preview_at TEXT NULL,
+              conversion_duration_ms INTEGER NOT NULL DEFAULT 0,
               total_pages INTEGER NOT NULL,
               source_path TEXT NOT NULL,
               pdf_path TEXT NOT NULL,
@@ -85,6 +87,8 @@ public sealed class AppDatabase(AppPaths paths)
             INSERT OR IGNORE INTO settings(key,value,updated_at) VALUES('site_name','PrinterWLAN',CURRENT_TIMESTAMP);
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await EnsureColumnAsync(connection, "documents", "preview_at", "TEXT NULL", cancellationToken);
+        await EnsureColumnAsync(connection, "documents", "conversion_duration_ms", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
 
         // An interrupted service cannot safely resume an in-process PrintDocument call.
         await using var repair = connection.CreateCommand();
@@ -136,7 +140,10 @@ public sealed class AppDatabase(AppPaths paths)
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO documents VALUES($id,$uid,$name,$ext,$mime,$size,$client,$created,$modified,$received,$pages,$source,$pdf,$status);
+            INSERT INTO documents(document_id,user_id,original_filename,extension,detected_mime,file_size,
+              client_last_modified,document_created_at,document_modified_at,server_received_at,preview_at,
+              conversion_duration_ms,total_pages,source_path,pdf_path,status)
+            VALUES($id,$uid,$name,$ext,$mime,$size,$client,$created,$modified,$received,$preview,$conversion,$pages,$source,$pdf,$status);
             """;
         command.Parameters.AddWithValue("$id", document.Id);
         command.Parameters.AddWithValue("$uid", document.UserId);
@@ -148,6 +155,8 @@ public sealed class AppDatabase(AppPaths paths)
         command.Parameters.AddWithValue("$created", Db(document.DocumentCreatedAt));
         command.Parameters.AddWithValue("$modified", Db(document.DocumentModifiedAt));
         command.Parameters.AddWithValue("$received", document.ServerReceivedAt.ToString("O"));
+        command.Parameters.AddWithValue("$preview", Db(document.PreviewAt));
+        command.Parameters.AddWithValue("$conversion", document.ConversionDurationMs);
         command.Parameters.AddWithValue("$pages", document.TotalPages);
         command.Parameters.AddWithValue("$source", document.SourcePath);
         command.Parameters.AddWithValue("$pdf", document.PdfPath);
@@ -161,7 +170,8 @@ public sealed class AppDatabase(AppPaths paths)
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT document_id,user_id,original_filename,extension,detected_mime,file_size,client_last_modified,
-              document_created_at,document_modified_at,server_received_at,total_pages,source_path,pdf_path,status
+              document_created_at,document_modified_at,server_received_at,preview_at,conversion_duration_ms,
+              total_pages,source_path,pdf_path,status
             FROM documents WHERE document_id=$id AND ($uid IS NULL OR user_id=$uid)
             """;
         command.Parameters.AddWithValue("$id", id);
@@ -170,8 +180,20 @@ public sealed class AppDatabase(AppPaths paths)
         if (!await reader.ReadAsync(cancellationToken)) return null;
         return new DocumentRecord(reader.GetString(0), reader.GetInt64(1), reader.GetString(2), reader.GetString(3),
             reader.GetString(4), reader.GetInt64(5), ParseNullable(reader, 6), ParseNullable(reader, 7),
-            ParseNullable(reader, 8), DateTimeOffset.Parse(reader.GetString(9)), reader.GetInt32(10), reader.GetString(11),
-            reader.GetString(12), reader.GetString(13));
+            ParseNullable(reader, 8), DateTimeOffset.Parse(reader.GetString(9)), ParseNullable(reader, 10), reader.GetInt64(11),
+            reader.GetInt32(12), reader.GetString(13), reader.GetString(14), reader.GetString(15));
+    }
+
+    public async Task MarkDocumentPreviewedAsync(string id, long userId, DateTimeOffset previewedAt,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE documents SET preview_at=COALESCE(preview_at,$now) WHERE document_id=$id AND user_id=$uid";
+        command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$uid", userId);
+        command.Parameters.AddWithValue("$now", previewedAt.ToString("O"));
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task DeleteDocumentRowAsync(string id, CancellationToken cancellationToken = default)
@@ -234,6 +256,19 @@ public sealed class AppDatabase(AppPaths paths)
     }
 
     private static object Db(DateTimeOffset? value) => value is null ? DBNull.Value : value.Value.ToString("O");
+    private static async Task EnsureColumnAsync(SqliteConnection connection, string table, string column,
+        string definition, CancellationToken cancellationToken)
+    {
+        await using var inspect = connection.CreateCommand();
+        inspect.CommandText = $"PRAGMA table_info({table})";
+        await using var reader = await inspect.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase)) return;
+        await reader.DisposeAsync();
+        await using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition}";
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
     private static DateTimeOffset? ParseNullable(SqliteDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : DateTimeOffset.Parse(reader.GetString(ordinal));
     private static string? GetNullable(SqliteDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);

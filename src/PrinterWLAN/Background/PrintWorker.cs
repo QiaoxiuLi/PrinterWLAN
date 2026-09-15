@@ -39,7 +39,8 @@ public sealed class PrintWorker(PrintJobQueue queue, AppDatabase database, IPrin
             await printer.SubmitAsync(document, request, jobId, cancellationToken);
             stopwatch.Stop();
             await database.UpdateJobAsync(jobId, "sent", cancellationToken: cancellationToken);
-            await activityLogs.WriteAsync(BuildRecord(job, "print_sent", document, request, stopwatch.Elapsed, null), cancellationToken);
+            var completedJob = await database.GetJobAsync(jobId, cancellationToken: cancellationToken) ?? job;
+            await activityLogs.WriteAsync(BuildRecord(completedJob, "print_sent", document, request, stopwatch.Elapsed, null), cancellationToken);
         }
         catch (Exception exception)
         {
@@ -47,7 +48,8 @@ public sealed class PrintWorker(PrintJobQueue queue, AppDatabase database, IPrin
             var friendly = exception is PrintValidationException validation ? validation.Message : "打印任务未能发送，请检查打印机后重试。";
             var internalError = Sanitize(exception);
             await database.UpdateJobAsync(jobId, "failed", friendly, internalError, cancellationToken);
-            await activityLogs.WriteAsync(BuildRecord(job, "print_failed", document, request, stopwatch.Elapsed, internalError), cancellationToken);
+            var failedJob = await database.GetJobAsync(jobId, cancellationToken: cancellationToken) ?? job;
+            await activityLogs.WriteAsync(BuildRecord(failedJob, "print_failed", document, request, stopwatch.Elapsed, internalError), cancellationToken);
             logger.LogError(exception, "Print job {JobId} failed", jobId);
         }
         finally
@@ -69,6 +71,8 @@ public sealed class PrintWorker(PrintJobQueue queue, AppDatabase database, IPrin
             selectedPageCount = request.SelectedPages.Count, request.Copies,
             totalRequestedPages = request.SelectedPages.Count * request.Copies, request.Collate, request.PaperSource,
             request.Resolution, request.ScaleMode, request.ScalePercent, request.Center,
+            uploadAt = document.ServerReceivedAt, document.PreviewAt, job.SubmittedAt, job.ProcessingStartedAt,
+            job.SentAt, job.FailedAt, document.ConversionDurationMs,
             printSubmissionDurationMs = (long)duration.TotalMilliseconds, error
         });
         return new ActivityRecord(now.ToUniversalTime(), now, type, job.UserId, job.Username, job.SessionId, job.DeviceId,

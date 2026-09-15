@@ -21,8 +21,8 @@ public sealed record ImportResult(int Added, int Updated, int Ignored);
 
 public sealed record DocumentRecord(string Id, long UserId, string OriginalFilename, string Extension,
     string DetectedMime, long FileSize, DateTimeOffset? ClientLastModified, DateTimeOffset? DocumentCreatedAt,
-    DateTimeOffset? DocumentModifiedAt, DateTimeOffset ServerReceivedAt, int TotalPages, string SourcePath,
-    string PdfPath, string Status);
+    DateTimeOffset? DocumentModifiedAt, DateTimeOffset ServerReceivedAt, DateTimeOffset? PreviewAt,
+    long ConversionDurationMs, int TotalPages, string SourcePath, string PdfPath, string Status);
 
 public sealed class PrintRequest
 {

@@ -27,6 +27,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="..\..\third-party\licenses\**\*" Link="third-party\licenses\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(NuGetPackageRoot)skiasharp/4.150.1/LICENSE.txt" Link="third-party\licenses\SkiaSharp-MIT.txt" CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(NuGetPackageRoot)skiasharp/4.150.1/LICENSE.txt')" />
     <Content Include="..\..\THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

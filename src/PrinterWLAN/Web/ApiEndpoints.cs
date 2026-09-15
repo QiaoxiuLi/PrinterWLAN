@@ -126,6 +126,7 @@ public static class ApiEndpoints
         {
             var document = await database.GetDocumentAsync(id, context.User.UserId(), token);
             if (document is null || !File.Exists(document.PdfPath)) return Results.NotFound(new { message = "预览文件已过期，请重新上传。" });
+            await database.MarkDocumentPreviewedAsync(id, context.User.UserId(), DateTimeOffset.UtcNow, token);
             context.Response.Headers.CacheControl = "no-store";
             return Results.File(document.PdfPath, "application/pdf", enableRangeProcessing: true);
         });

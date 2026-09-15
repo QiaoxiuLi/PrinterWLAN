@@ -69,6 +69,9 @@ try
     await app.Services.GetRequiredService<ActivityLogService>().InitializeAsync();
     app.UseExceptionHandler(error => error.Run(async context =>
     {
+        var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+        context.RequestServices.GetRequiredService<ILogger<Program>>()
+            .LogError(exception, "Unhandled request error for {Method} {Path}", context.Request.Method, context.Request.Path);
         context.Response.StatusCode = 500;
         await context.Response.WriteAsJsonAsync(new { message = "操作未能完成，请稍后重试。" });
     }));

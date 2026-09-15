@@ -65,7 +65,9 @@ public sealed class ActivityLogService(AppPaths paths, AppDatabase appDatabase, 
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var all = new List<Dictionary<string, object?>>();
+        var records = new List<Dictionary<string, object?>>(pageSize);
+        var rowsToSkip = (long)(page - 1) * pageSize;
+        long total = 0;
         foreach (var slice in (await ListSlicesAsync(cancellationToken)).OrderByDescending(x => x.Start))
         {
             if (start is not null && slice.End.ToDateTime(TimeOnly.MaxValue) < start.Value.LocalDateTime) continue;
@@ -73,21 +75,41 @@ public sealed class ActivityLogService(AppPaths paths, AppDatabase appDatabase, 
             var path = await ObtainReadableDatabaseAsync(slice, cancellationToken);
             if (!File.Exists(path)) continue;
             await using var connection = await OpenAsync(path, readOnly: true, cancellationToken);
-            await using var command = connection.CreateCommand();
-            command.CommandText = """
+            await using var countCommand = connection.CreateCommand();
+            countCommand.CommandText = """
+                SELECT COUNT(*) FROM records WHERE ($username='' OR username LIKE $usernameLike ESCAPE '\')
+                  AND ($start='' OR utc_time >= $start) AND ($end='' OR utc_time <= $end)
+                  AND ($type='' OR type=$type) AND ($ip='' OR ip_address=$ip)
+                """;
+            AddQueryParameters(countCommand, username, start, end, type, ip);
+            var sliceCount = Convert.ToInt64(await countCommand.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
+            total += sliceCount;
+
+            if (records.Count >= pageSize) continue;
+            if (rowsToSkip >= sliceCount)
+            {
+                rowsToSkip -= sliceCount;
+                continue;
+            }
+
+            await using var pageCommand = connection.CreateCommand();
+            pageCommand.CommandText = """
                 SELECT id,utc_time,local_time,type,user_id,username,session_id,device_id,ip_address,user_agent,
                   language,platform,viewport,screen,timezone,referrer,detail_json
                 FROM records WHERE ($username='' OR username LIKE $usernameLike ESCAPE '\')
                   AND ($start='' OR utc_time >= $start) AND ($end='' OR utc_time <= $end)
                   AND ($type='' OR type=$type) AND ($ip='' OR ip_address=$ip)
                 ORDER BY utc_time DESC
+                LIMIT $limit OFFSET $offset
                 """;
-            AddQueryParameters(command, username, start, end, type, ip);
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken)) all.Add(ReadRecord(reader));
+            AddQueryParameters(pageCommand, username, start, end, type, ip);
+            pageCommand.Parameters.AddWithValue("$limit", pageSize - records.Count);
+            pageCommand.Parameters.AddWithValue("$offset", rowsToSkip);
+            await using var reader = await pageCommand.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken)) records.Add(ReadRecord(reader));
+            rowsToSkip = 0;
         }
-        all.Sort((left, right) => string.CompareOrdinal((string?)right["utcTime"], (string?)left["utcTime"]));
-        return (all.Skip((page - 1) * pageSize).Take(pageSize).ToArray(), all.Count);
+        return (records, total > int.MaxValue ? int.MaxValue : (int)total);
     }
 
     public async Task<IReadOnlyList<SliceInfo>> ListSlicesAsync(CancellationToken cancellationToken = default)

@@ -14,6 +14,7 @@ public sealed class DocumentService(AppPaths paths, AppDatabase database, IWordC
     public async Task<DocumentRecord> ReceiveAsync(long userId, IFormFile file, DateTimeOffset? clientLastModified,
         CancellationToken cancellationToken)
     {
+        var received = DateTimeOffset.UtcNow;
         if (file.Length <= 0) throw new DocumentException("请选择一个有效的文件。", "Empty upload rejected.");
         if (file.Length > options.Value.MaxUploadBytes) throw new DocumentException("文件太大，请选择较小的文件。", "Upload exceeded configured limit.");
         var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
@@ -29,14 +30,17 @@ public sealed class DocumentService(AppPaths paths, AppDatabase database, IWordC
                 await file.CopyToAsync(output, cancellationToken);
             var detectedMime = await ValidateSignatureAsync(sourcePath, extension, cancellationToken);
             var (created, modified) = extension == ".docx" ? ReadDocxProperties(sourcePath) : (null, null);
+            var conversion = System.Diagnostics.Stopwatch.StartNew();
             var pdfPath = extension == ".pdf" ? sourcePath : await converter.ConvertToPdfAsync(sourcePath, directory, cancellationToken);
+            conversion.Stop();
+            var conversionDurationMs = extension == ".pdf" ? 0 : (long)conversion.Elapsed.TotalMilliseconds;
             int pageCount;
             try { pageCount = Conversion.GetPageCount(pdfPath); }
             catch (Exception exception) { throw new DocumentException("无法打开这个文件，请确认文件没有损坏或加密。", "PDFium could not read document.", exception); }
             if (pageCount <= 0) throw new DocumentException("这个文件没有可预览的页面。", "Document has no pages.");
-            var received = DateTimeOffset.UtcNow;
             var record = new DocumentRecord(id, userId, Path.GetFileName(file.FileName), extension, detectedMime,
-                file.Length, clientLastModified, created, modified, received, pageCount, sourcePath, pdfPath, "ready");
+                file.Length, clientLastModified, created, modified, received, null, conversionDurationMs, pageCount,
+                sourcePath, pdfPath, "ready");
             await database.SaveDocumentAsync(record, cancellationToken);
             return record;
         }
