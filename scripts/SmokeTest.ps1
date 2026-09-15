@@ -9,26 +9,17 @@ if ([string]::IsNullOrWhiteSpace($AdminPassword)) { throw 'PRINTERWLAN_ADMIN_PAS
 New-Item -ItemType Directory -Force $OutputDirectory | Out-Null
 
 function New-TestPdf([string]$Path) {
-  $objects = @(
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
-    $null,
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
-  )
-  $content = 'BT /F1 24 Tf 72 720 Td (PrinterWLAN Smoke Test) Tj ET'
-  $objects[3] = "<< /Length $($content.Length) >>`nstream`n$content`nendstream"
-  $builder = [System.Text.StringBuilder]::new("%PDF-1.4`n")
-  $offsets = [System.Collections.Generic.List[int]]::new()
-  for ($i=0; $i -lt $objects.Count; $i++) {
-    $offsets.Add([Text.Encoding]::ASCII.GetByteCount($builder.ToString()))
-    [void]$builder.Append("$($i+1) 0 obj`n$($objects[$i])`nendobj`n")
-  }
-  $xref = [Text.Encoding]::ASCII.GetByteCount($builder.ToString())
-  [void]$builder.Append("xref`n0 6`n0000000000 65535 f `n")
-  foreach ($offset in $offsets) { [void]$builder.Append(('{0:0000000000} 00000 n ' -f $offset)+"`n") }
-  [void]$builder.Append("trailer`n<< /Size 6 /Root 1 0 R >>`nstartxref`n$xref`n%%EOF`n")
-  [IO.File]::WriteAllText($Path,$builder.ToString(),[Text.Encoding]::ASCII)
+  $source = Join-Path (Split-Path -Parent $Path) 'pdf-source.docx'
+  New-TestDocx $source
+  $profile = Join-Path (Split-Path -Parent $Path) ('pdf-profile-' + [Guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Force $profile | Out-Null
+  $profileUri = ([Uri]($profile + [IO.Path]::DirectorySeparatorChar)).AbsoluteUri
+  $soffice = "$env:ProgramFiles\PrinterWLAN\third-party\LibreOffice\program\soffice.com"
+  & $soffice "-env:UserInstallation=$profileUri" '--headless' '--nologo' '--nodefault' '--nofirststartwizard' '--norestore' '--convert-to' 'pdf' '--outdir' (Split-Path -Parent $Path) $source | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Bundled LibreOffice could not generate the PDF smoke fixture (exit $LASTEXITCODE)." }
+  $generated = [IO.Path]::ChangeExtension($source, '.pdf')
+  if (-not (Test-Path $generated)) { throw 'Bundled LibreOffice did not create the PDF smoke fixture.' }
+  Move-Item $generated $Path -Force
 }
 
 function New-TestDocx([string]$Path) {
