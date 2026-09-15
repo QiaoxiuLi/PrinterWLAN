@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using PrinterWLAN.Authentication;
 using System.Net.Http.Json;
+using Microsoft.Data.Sqlite;
 
 namespace PrinterWLAN.IntegrationTests;
 
@@ -53,6 +54,7 @@ public sealed class PrinterWlanFactory : WebApplicationFactory<Program>, IAsyncL
     public new async Task DisposeAsync()
     {
         await base.DisposeAsync();
+        SqliteConnection.ClearAllPools();
         Environment.SetEnvironmentVariable("PRINTERWLAN_DATA_DIR", null);
         if (Directory.Exists(_directory)) Directory.Delete(_directory, true);
     }

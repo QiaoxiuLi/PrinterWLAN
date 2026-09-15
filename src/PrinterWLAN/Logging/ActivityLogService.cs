@@ -296,7 +296,8 @@ public sealed class ActivityLogService(AppPaths paths, AppDatabase appDatabase, 
         if (!File.Exists(cached))
         {
             var temporary = cached + ".tmp";
-            await using (var input = ZipFile.OpenRead(archive).Entries.Single().Open())
+            using var zip = ZipFile.OpenRead(archive);
+            await using (var input = zip.Entries.Single().Open())
             await using (var output = File.Create(temporary)) await input.CopyToAsync(output, cancellationToken);
             File.Move(temporary, cached, true);
         }
