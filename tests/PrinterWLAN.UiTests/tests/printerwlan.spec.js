@@ -1,0 +1,17 @@
+import { test, expect } from '@playwright/test';
+
+const adminPassword=process.env.PRINTERWLAN_ADMIN_PASSWORD||'';
+const userPassword=process.env.PRINTERWLAN_TEST_USER_PASSWORD||'';
+
+async function adminLogin(page){await page.goto('/');await page.getByRole('button',{name:'管理员登录'}).click();await page.getByLabel('管理员密码').fill(adminPassword);await page.getByRole('button',{name:'登录'}).click();await expect(page.getByText('使用记录',{exact:true}).first()).toBeVisible()}
+async function userLogin(page){await page.goto('/');await page.getByLabel('用户名').fill('测试用户');await page.getByLabel('密码').fill(userPassword);await page.getByRole('button',{name:'登录'}).click();await expect(page.getByRole('heading',{name:'打印文件'})).toBeVisible()}
+
+test.describe.serial('PrinterWLAN UI',()=>{
+  for(const width of [320,360,390,768,1366,1920])test(`login layout ${width}px`,async({page})=>{await page.setViewportSize({width,height:width<500?800:900});await page.goto('/');await expect(page.getByRole('button',{name:'管理员登录'})).toBeVisible();const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);expect(overflow).toBeLessThanOrEqual(1);const buttons=await page.locator('button').all();for(const button of buttons){const box=await button.boundingBox();if(box)expect(box.width).toBeGreaterThan(38)}});
+
+  test('admin login, CSV order, reveal and export',async({page})=>{await adminLogin(page);await page.getByRole('button',{name:'用户设置'}).click();const csv=Buffer.from('\ufeff用户名\n顺序甲\n顺序乙\n测试用户\n','utf8');await page.locator('#csv-file').setInputFiles({name:'users.csv',mimeType:'text/csv',buffer:csv});await expect(page.locator('#import-result')).toContainText('更新 1 位');const names=await page.locator('tbody tr td:nth-child(2)').allTextContents();expect(names.indexOf('顺序甲')).toBeLessThan(names.indexOf('顺序乙'));await page.locator('tbody tr',{hasText:'顺序甲'}).getByRole('button',{name:'显示'}).click();await expect(page.locator('tbody tr',{hasText:'顺序甲'}).locator('.password-value')).not.toHaveText('••••••••••');const downloadPromise=page.waitForEvent('download');await page.getByRole('link',{name:'导出用户名密码'}).click();expect((await downloadPromise).suggestedFilename()).toContain('PrinterWLAN_Users.csv')});
+
+  test('PDF preview, capabilities and 20-page limit',async({page})=>{await userLogin(page);await page.locator('#file-input').setInputFiles('../../artifacts/smoke/sample.pdf');await expect(page.getByRole('heading',{name:'打印设置'})).toBeVisible({timeout:30000});await expect(page.locator('#printer')).toHaveValue('PrinterWLAN Test Printer');await page.locator('#copies').fill('21');await page.getByRole('button',{name:'提交打印'}).click();await expect(page.locator('#print-error')).toContainText('最多打印 20 页')});
+
+  test('usage records and protected clear confirmation',async({page})=>{await adminLogin(page);await expect(page.locator('#records-table tbody tr').first()).toBeVisible();await page.getByRole('button',{name:'清空日志'}).click();await expect(page.getByText('此操作会永久删除全部使用记录和打印记录。')).toBeVisible();await page.locator('#clear-password').fill('wrong');await page.getByRole('button',{name:'永久清空'}).click();await expect(page.locator('#clear-error')).toContainText('不正确');await page.locator('#clear-password').fill(adminPassword);await page.getByRole('button',{name:'永久清空'}).click();await expect(page.getByText('清空全部日志')).not.toBeVisible();});
+});

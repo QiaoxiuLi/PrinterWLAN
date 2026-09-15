@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/PrinterWLAN/PrinterWLAN.csproj" />
+  <Project Path="tests/PrinterWLAN.Tests/PrinterWLAN.Tests.csproj" />
+  <Project Path="tests/PrinterWLAN.IntegrationTests/PrinterWLAN.IntegrationTests.csproj" />
+</Solution>

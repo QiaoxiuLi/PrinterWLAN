@@ -1,0 +1,74 @@
+name: Windows Server 2025 CI
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-test-installer:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.401
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+      - name: Prepare pinned offline dependencies
+        shell: pwsh
+        run: ./scripts/Prepare-ThirdParty.ps1
+      - name: Restore
+        run: dotnet restore PrinterWLAN.slnx --locked-mode
+      - name: Build
+        run: dotnet build PrinterWLAN.slnx -c Release --no-restore
+      - name: Unit and integration tests
+        run: dotnet test PrinterWLAN.slnx -c Release --no-build --logger "trx;LogFileName=tests.trx"
+      - name: Publish self-contained Windows x64
+        run: dotnet publish src/PrinterWLAN/PrinterWLAN.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/publish
+      - name: Compile Inno Setup installer
+        shell: pwsh
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\PrinterWLAN.iss'
+      - name: Generate ephemeral smoke-test credential
+        shell: pwsh
+        run: |
+          $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          "PRINTERWLAN_ADMIN_PASSWORD=$password" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Installer smoke test
+        shell: pwsh
+        run: ./scripts/SmokeTest.ps1 -InstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe
+      - name: Playwright browser tests
+        shell: pwsh
+        working-directory: tests/PrinterWLAN.UiTests
+        run: |
+          npm ci
+          npx playwright install chromium
+          npm test
+      - name: Uninstall smoke test
+        shell: pwsh
+        run: |
+          $uninstaller = "$env:ProgramFiles\PrinterWLAN\unins000.exe"
+          if (-not (Test-Path $uninstaller)) { throw 'Uninstaller missing.' }
+          Start-Process $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait
+          if (Get-Service PrinterWLAN -ErrorAction SilentlyContinue) { throw 'Service still exists after uninstall.' }
+      - name: Generate checksum
+        shell: pwsh
+        run: |
+          $file='artifacts/installer/PrinterWLAN-Setup-x64.exe'
+          $hash=(Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  PrinterWLAN-Setup-x64.exe" | Set-Content "$file.sha256" -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PrinterWLAN-v1.0.0-windows-x64
+          path: |
+            artifacts/installer/PrinterWLAN-Setup-x64.exe
+            artifacts/installer/PrinterWLAN-Setup-x64.exe.sha256
+            **/TestResults/*.trx
+            tests/PrinterWLAN.UiTests/playwright-report/
+          if-no-files-found: warn

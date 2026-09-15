@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-15",
+  "downloads": [
+    {
+      "name": "Mozilla PDF.js generic npm distribution",
+      "version": "6.3.289",
+      "url": "https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-6.3.289.tgz",
+      "sha256": "06f25e887adc6489f04c9fcb14198c77e4e5623a59a0bba5c4cea5838a4f1241"
+    },
+    {
+      "name": "LibreOffice Windows x86-64 MSI",
+      "version": "26.8.0",
+      "url": "https://download.documentfoundation.org/libreoffice/stable/26.8.0/win/x86_64/LibreOffice_26.8.0_Win_x86-64.msi",
+      "sha256": "4aa6c6e1895f4055104effcb556bd3362d20c6ad707c149543304f395ef9db95"
+    }
+  ],
+  "nuget": {
+    "PDFtoImage": "5.4.0",
+    "PDFium": "152.0.7961",
+    "SkiaSharp": "4.150.1",
+    "Microsoft.Data.Sqlite": "10.0.12",
+    "CsvHelper": "33.1.0",
+    "DocumentFormat.OpenXml": "3.5.1",
+    "Serilog.AspNetCore": "10.0.0",
+    "Serilog.Sinks.File": "7.0.0"
+  }
+}

@@ -1,0 +1,53 @@
+name: Release PrinterWLAN
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with: { dotnet-version: 10.0.401 }
+      - name: Prepare, test, and publish
+        shell: pwsh
+        run: |
+          ./scripts/Prepare-ThirdParty.ps1
+          dotnet restore PrinterWLAN.slnx
+          dotnet build PrinterWLAN.slnx -c Release --no-restore
+          dotnet test PrinterWLAN.slnx -c Release --no-build --logger "trx;LogFileName=tests.trx"
+          dotnet publish src/PrinterWLAN/PrinterWLAN.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/publish
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\PrinterWLAN.iss
+          $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          "PRINTERWLAN_ADMIN_PASSWORD=$password" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          $env:PRINTERWLAN_ADMIN_PASSWORD=$password
+          ./scripts/SmokeTest.ps1 -InstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe
+      - name: Playwright UI tests
+        shell: pwsh
+        working-directory: tests/PrinterWLAN.UiTests
+        run: |
+          npm ci
+          npx playwright install chromium
+          npm test
+      - name: Verify uninstall and checksum
+        shell: pwsh
+        run: |
+          Start-Process "$env:ProgramFiles\PrinterWLAN\unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait
+          if (Get-Service PrinterWLAN -ErrorAction SilentlyContinue) { throw 'Service still exists after uninstall.' }
+          $file='artifacts/installer/PrinterWLAN-Setup-x64.exe'
+          $hash=(Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  PrinterWLAN-Setup-x64.exe" | Set-Content "$file.sha256" -Encoding ascii
+      - name: Create GitHub Release
+        shell: pwsh
+        run: |
+          gh release create '${{ github.ref_name }}' `
+            'artifacts/installer/PrinterWLAN-Setup-x64.exe' `
+            'artifacts/installer/PrinterWLAN-Setup-x64.exe.sha256' `
+            --verify-tag --title 'PrinterWLAN v1.0.0' --notes-file docs/RELEASE_NOTES_v1.0.0.md
