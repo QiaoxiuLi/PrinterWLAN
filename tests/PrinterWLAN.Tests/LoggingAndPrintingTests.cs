@@ -1,4 +1,5 @@
 using System.Drawing;
+using PDFtoImage;
 using PrinterWLAN.Logging;
 using PrinterWLAN.Models;
 using PrinterWLAN.Printing;
@@ -7,6 +8,14 @@ namespace PrinterWLAN.Tests;
 
 public sealed class LoggingAndPrintingTests
 {
+    [Fact]
+    public void PinnedPdfiumRuntimeReadsUpstreamPdfFixture()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "SocialPreview.pdf");
+        Assert.True(File.Exists(path), $"Missing pinned PDF fixture: {path}");
+        Assert.True(Conversion.GetPageCount(path) > 0);
+    }
+
     [Theory]
     [InlineData("2026-09-15", "2026-09-15", "2026-09-24")]
     [InlineData("2026-09-24", "2026-09-15", "2026-09-24")]

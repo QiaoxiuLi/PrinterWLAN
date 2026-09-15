@@ -71,4 +71,5 @@ jobs:
             artifacts/installer/PrinterWLAN-Setup-x64.exe.sha256
             **/TestResults/*.trx
             tests/PrinterWLAN.UiTests/playwright-report/
+            C:/ProgramData/PrinterWLAN/Diagnostics/
           if-no-files-found: warn

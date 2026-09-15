@@ -19,6 +19,12 @@
       "version": "152.0.7961",
       "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F7961/pdfium-win-x64.tgz",
       "sha256": "88276459349b291c41f10422dad0210f007c04d919c8fa56472b6b7c6406adf4"
+    },
+    {
+      "name": "PDFtoImage v5.4.0 upstream PDF test fixture",
+      "version": "5.4.0",
+      "url": "https://raw.githubusercontent.com/sungaila/PDFtoImage/5948628cb2cf7d070c7fd28b1b4496db39e3afcd/src/Tests/Assets/SocialPreview.pdf",
+      "sha256": "9cd267ac85ba81608acc935f5aa62a01713832a6a48fc8a88d164c10e62418b4"
     }
   ],
   "nuget": {

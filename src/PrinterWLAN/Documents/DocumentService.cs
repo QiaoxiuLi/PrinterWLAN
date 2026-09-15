@@ -36,7 +36,11 @@ public sealed class DocumentService(AppPaths paths, AppDatabase database, IWordC
             var conversionDurationMs = extension == ".pdf" ? 0 : (long)conversion.Elapsed.TotalMilliseconds;
             int pageCount;
             try { pageCount = Conversion.GetPageCount(pdfPath); }
-            catch (Exception exception) { throw new DocumentException("无法打开这个文件，请确认文件没有损坏或加密。", "PDFium could not read document.", exception); }
+            catch (Exception exception)
+            {
+                logger.LogError(exception, "PDFium could not read uploaded {Extension} document {DocumentId}", extension, id);
+                throw new DocumentException("无法打开这个文件，请确认文件没有损坏或加密。", "PDFium could not read document.", exception);
+            }
             if (pageCount <= 0) throw new DocumentException("这个文件没有可预览的页面。", "Document has no pages.");
             var record = new DocumentRecord(id, userId, Path.GetFileName(file.FileName), extension, detectedMime,
                 file.Length, clientLastModified, created, modified, received, null, conversionDurationMs, pageCount,

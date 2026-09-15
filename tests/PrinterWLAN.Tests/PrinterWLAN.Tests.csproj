@@ -11,4 +11,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5"><PrivateAssets>all</PrivateAssets><IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets></PackageReference>
   </ItemGroup>
   <ItemGroup><ProjectReference Include="../../src/PrinterWLAN/PrinterWLAN.csproj" /></ItemGroup>
+  <ItemGroup>
+    <Content Include="../../third-party/runtime/test-fixtures/SocialPreview.pdf" Link="Fixtures/SocialPreview.pdf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

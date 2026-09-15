@@ -45,6 +45,13 @@ if (Test-Path $pdfiumLicenses) { Remove-Item $pdfiumLicenses -Recurse -Force }
 Copy-Item (Join-Path $pdfiumTemp 'licenses') $pdfiumLicenses -Recurse -Force
 Remove-Item $pdfiumTemp -Recurse -Force
 
+$pdfFixture = $manifest.downloads | Where-Object name -Like 'PDFtoImage*fixture'
+$fixtureDownload = Join-Path $downloads 'PDFtoImage-SocialPreview.pdf'
+Get-VerifiedFile $pdfFixture $fixtureDownload
+$fixtureTarget = Join-Path $runtime 'test-fixtures'
+New-Item -ItemType Directory -Force $fixtureTarget | Out-Null
+Copy-Item $fixtureDownload (Join-Path $fixtureTarget 'SocialPreview.pdf') -Force
+
 if (-not $SkipLibreOffice) {
   $lo = $manifest.downloads | Where-Object name -Like 'LibreOffice*'
   $loMsi = Join-Path $downloads "LibreOffice-$($lo.version)-x64.msi"
