@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PrinterWLAN.Authentication;
 using System.Net.Http.Json;
 using Microsoft.Data.Sqlite;
+using Serilog;
 
 namespace PrinterWLAN.IntegrationTests;
 
@@ -54,8 +55,19 @@ public sealed class PrinterWlanFactory : WebApplicationFactory<Program>, IAsyncL
     public new async Task DisposeAsync()
     {
         await base.DisposeAsync();
+        await Log.CloseAndFlushAsync();
         SqliteConnection.ClearAllPools();
         Environment.SetEnvironmentVariable("PRINTERWLAN_DATA_DIR", null);
-        if (Directory.Exists(_directory)) Directory.Delete(_directory, true);
+        for (var attempt = 1; attempt <= 10 && Directory.Exists(_directory); attempt++)
+        {
+            try
+            {
+                Directory.Delete(_directory, true);
+            }
+            catch (IOException) when (attempt < 10)
+            {
+                await Task.Delay(100);
+            }
+        }
     }
 }
