@@ -164,7 +164,12 @@ public static class ApiEndpoints
     private static void MapAdmin(RouteGroupBuilder group)
     {
         group.RequireAuthorization("AdminOnly");
-        group.MapPost("/logout", async (HttpContext context) => { await context.SignOutAsync("AdminCookie"); return Results.NoContent(); });
+        group.MapPost("/logout", async (HttpContext context, ActivityLogService logs, CancellationToken token) =>
+        {
+            await logs.WriteAsync(ActivityFactory.From(context, "admin_logout"), token);
+            await context.SignOutAsync("AdminCookie");
+            return Results.NoContent();
+        });
         group.MapGet("/settings", async (AppDatabase database, CancellationToken token) => Results.Ok(new { siteName = await database.GetSettingAsync("site_name", "PrinterWLAN", token), version = "1.0.0" }));
         group.MapPut("/settings", async ([FromBody] SiteSettings request, AppDatabase database, CancellationToken token) =>
         {
