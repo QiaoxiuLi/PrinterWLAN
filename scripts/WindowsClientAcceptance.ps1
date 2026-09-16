@@ -25,6 +25,7 @@ $delayed = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\PrinterWLA
 if ($delayed -ne 1) { throw 'PrinterWLAN Windows Service is not configured for delayed automatic startup.' }
 
 $executable = "$env:ProgramFiles\PrinterWLAN\PrinterWLAN.exe"
+$printPathEvidence = Get-Content (Join-Path $OutputDirectory 'print-path-evidence.json') -Raw | ConvertFrom-Json
 $evidence = [ordered]@{
   testedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
   windowsCaption = $os.Caption
@@ -39,6 +40,8 @@ $evidence = [ordered]@{
   serviceDependencies = @($dependencies)
   realWindowsPrintDriver = 'Microsoft Print to PDF'
   printedOutput = (Join-Path $OutputDirectory 'windows-driver-output.pdf')
+  printPathValidation = $printPathEvidence.mode
+  printPathOutputBytes = $printPathEvidence.outputBytes
   result = 'passed'
 }
 $evidence | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $OutputDirectory 'compatibility-evidence.json') -Encoding utf8

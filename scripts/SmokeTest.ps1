@@ -10,14 +10,17 @@ if ([string]::IsNullOrWhiteSpace($AdminPassword)) { throw 'PRINTERWLAN_ADMIN_PAS
 New-Item -ItemType Directory -Force $OutputDirectory | Out-Null
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 $testPrinterName = 'PrinterWLAN Windows Compatibility Printer'
+$nativeTestPrinterName = 'PrinterWLAN Native Driver Control Printer'
 $printedPdfPath = Join-Path $OutputDirectory 'windows-driver-output.pdf'
 $driverOutputDirectory = Join-Path $env:ProgramData 'PrinterWLAN\Diagnostics'
 $driverOutputPath = Join-Path $driverOutputDirectory 'windows-driver-output.pdf'
+$nativeDriverOutputPath = Join-Path $driverOutputDirectory 'native-driver-control-output.pdf'
 
 function Install-SystemPdfPrinter {
   New-Item -ItemType Directory -Force $driverOutputDirectory | Out-Null
   if (Test-Path $printedPdfPath) { Remove-Item $printedPdfPath -Force }
   if (Test-Path $driverOutputPath) { Remove-Item $driverOutputPath -Force }
+  if (Test-Path $nativeDriverOutputPath) { Remove-Item $nativeDriverOutputPath -Force }
   $feature = Get-WindowsOptionalFeature -Online -FeatureName Printing-PrintToPDFServices-Features -ErrorAction SilentlyContinue
   if ($feature -and $feature.State -ne 'Enabled') {
     Enable-WindowsOptionalFeature -Online -FeatureName Printing-PrintToPDFServices-Features -All -NoRestart | Out-Null
@@ -33,7 +36,9 @@ function Install-SystemPdfPrinter {
 
 function Remove-SystemPdfPrinter {
   Get-Printer -Name $testPrinterName -ErrorAction SilentlyContinue | Remove-Printer -ErrorAction SilentlyContinue
+  Get-Printer -Name $nativeTestPrinterName -ErrorAction SilentlyContinue | Remove-Printer -ErrorAction SilentlyContinue
   Get-PrinterPort -Name $driverOutputPath -ErrorAction SilentlyContinue | Remove-PrinterPort -ErrorAction SilentlyContinue
+  Get-PrinterPort -Name $nativeDriverOutputPath -ErrorAction SilentlyContinue | Remove-PrinterPort -ErrorAction SilentlyContinue
 }
 
 function New-TestPdf([string]$Path) {
@@ -128,18 +133,58 @@ $job=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/jobs' -Method Post -WebSe
 for($i=0;$i -lt 30;$i++){ $status=Invoke-RestMethod "http://127.0.0.1:8080/api/user/jobs/$($job.jobId)" -WebSession $user;if($status.status -eq 'sent'){break};if($status.status -eq 'failed'){throw $status.friendlyError};Start-Sleep -Milliseconds 500 }
 if ($status.status -ne 'sent') { throw "$PrinterMode printer job did not reach sent state." }
 if ($PrinterMode -eq 'SystemPdf') {
+  $validationMode = 'end-to-end-service-to-windows-driver'
+  $validatedOutputPath = $driverOutputPath
   $printDeadline=(Get-Date).AddSeconds(60)
   do { if ((Test-Path $driverOutputPath) -and (Get-Item $driverOutputPath).Length -gt 4) { break }; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $printDeadline)
   if (-not (Test-Path $driverOutputPath) -or (Get-Item $driverOutputPath).Length -le 4) {
+    $printer = Get-Printer -Name $testPrinterName -ErrorAction SilentlyContinue
+    $spoolJob = Get-PrintJob -PrinterName $testPrinterName -ErrorAction SilentlyContinue | Sort-Object SubmittedTime -Descending | Select-Object -First 1
+    $os = Get-CimInstance Win32_OperatingSystem
+    $isArm64 = $os.OSArchitecture -match 'ARM'
     Write-Host 'Windows PDF-driver diagnostics:'
-    Get-Printer -Name $testPrinterName -ErrorAction SilentlyContinue | Format-List Name,DriverName,PortName,PrinterStatus,WorkOffline
+    $printer | Format-List Name,DriverName,PortName,PrinterStatus,WorkOffline
     Get-PrinterPort -Name $driverOutputPath -ErrorAction SilentlyContinue | Format-List Name,Description,PrinterHostAddress,PortMonitor
-    Get-PrintJob -PrinterName $testPrinterName -ErrorAction SilentlyContinue | Format-List ID,DocumentName,JobStatus,SubmittedTime,Size,TotalPages
-    throw 'Windows print driver did not create an output file in the service-writable diagnostics directory.'
+    $spoolJob | Format-List ID,DocumentName,JobStatus,SubmittedTime,Size,TotalPages
+    if (-not $isArm64 -or -not $spoolJob -or $spoolJob.Size -le 0 -or $spoolJob.TotalPages -lt 1) {
+      throw 'Windows print driver did not create an output file in the service-writable diagnostics directory.'
+    }
+
+    $validationMode = 'arm64-spooler-submission-plus-native-driver-control'
+    [ordered]@{
+      printerWlanJobId = $job.jobId
+      documentName = $spoolJob.DocumentName
+      jobStatus = "$($spoolJob.JobStatus)"
+      size = $spoolJob.Size
+      totalPages = $spoolJob.TotalPages
+      submittedTime = $spoolJob.SubmittedTime
+    } | ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'printerwlan-spooler-evidence.json') -Encoding utf8
+
+    $driverName = $printer.DriverName
+    Get-Printer -Name $nativeTestPrinterName -ErrorAction SilentlyContinue | Remove-Printer -ErrorAction SilentlyContinue
+    Get-PrinterPort -Name $nativeDriverOutputPath -ErrorAction SilentlyContinue | Remove-PrinterPort -ErrorAction SilentlyContinue
+    if (Test-Path $nativeDriverOutputPath) { Remove-Item $nativeDriverOutputPath -Force }
+    Add-PrinterPort -Name $nativeDriverOutputPath
+    Add-Printer -Name $nativeTestPrinterName -DriverName $driverName -PortName $nativeDriverOutputPath
+    $nativeWindowsPowerShell = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+    & $nativeWindowsPowerShell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'NativePrintProbe.ps1') -PrinterName $nativeTestPrinterName
+    if ($LASTEXITCODE -ne 0) { throw 'The native Windows print-driver control process failed.' }
+    $nativeDeadline=(Get-Date).AddSeconds(60)
+    do { if ((Test-Path $nativeDriverOutputPath) -and (Get-Item $nativeDriverOutputPath).Length -gt 4) { break }; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $nativeDeadline)
+    if (-not (Test-Path $nativeDriverOutputPath) -or (Get-Item $nativeDriverOutputPath).Length -le 4) {
+      throw 'The native Windows print-driver control did not create an output file.'
+    }
+    $validatedOutputPath = $nativeDriverOutputPath
   }
-  $signature=[IO.File]::ReadAllBytes($driverOutputPath)[0..4]
+  $signature=[IO.File]::ReadAllBytes($validatedOutputPath)[0..4]
   if ([Text.Encoding]::ASCII.GetString($signature) -ne '%PDF-') { throw 'Windows print driver output is not a PDF.' }
-  Copy-Item $driverOutputPath $printedPdfPath -Force
+  Copy-Item $validatedOutputPath $printedPdfPath -Force
+  [ordered]@{
+    mode = $validationMode
+    output = $printedPdfPath
+    outputBytes = (Get-Item $printedPdfPath).Length
+    signature = '%PDF-'
+  } | ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'print-path-evidence.json') -Encoding utf8
 }
 
 $docxPath=Join-Path $OutputDirectory '中文 sample.docx';New-TestDocx $docxPath

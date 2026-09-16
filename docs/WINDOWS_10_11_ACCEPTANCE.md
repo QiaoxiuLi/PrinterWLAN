@@ -6,7 +6,9 @@
 
 ## 自动验收
 
-Windows 11 Desktop 由 GitHub Actions 自动执行。Release 只有在 Windows Server 2025 测试与 Windows 11 Desktop 系统打印驱动测试都通过后才能发布。
+Windows 11 Desktop 由 GitHub Actions 的 ARM64 桌面映像自动执行。x64 PrinterWLAN 必须成功安装、加载全部内置组件，并向真实 Windows Spooler 提交具有非零大小和有效页数的任务；随后由系统原生 ARM64 进程验证同一打印队列和 `Microsoft Print to PDF` 驱动能够生成有效 PDF。这样可以把应用提交链路与 GitHub ARM64 托管机的跨架构驱动限制分开记录。
+
+Windows 10/11 x64 真机不会启用上述 ARM64 特例：必须由 PrinterWLAN 服务本身端到端生成带 `%PDF-` 签名的文件，才会通过验收。
 
 ## Windows 10 真机验收命令
 
@@ -34,6 +36,8 @@ $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator
 
 - `compatibility-evidence.json`：Windows 版本、build、架构、PrinterWLAN 版本和服务配置；
 - `windows-driver-output.pdf`：Windows 打印驱动实际输出；
+- `print-path-evidence.json`：端到端或 ARM64 拆分验证模式与输出大小；
+- `printerwlan-spooler-evidence.json`：仅在 Windows 11 ARM64 跨架构驱动回退时生成，记录 PrinterWLAN 提交任务的大小、页数和队列状态；
 - 上传、用户导出等烟雾测试中间证据。
 
 验收脚本不会假装验证物理纸张。使用具体品牌打印机时，还应在管理员后台选择该打印机，以 PDF 和 DOCX 各打印一份，确认纸张、方向、单双面、颜色、纸盒和分辨率与驱动能力一致。

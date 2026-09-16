@@ -87,7 +87,7 @@ jobs:
           if-no-files-found: warn
 
   windows-11-desktop-compatibility:
-    name: Windows 11 Desktop / real print driver
+    name: Windows 11 Desktop compatibility
     needs: build-test-installer
     runs-on: windows-11-arm
     timeout-minutes: 45
@@ -100,7 +100,7 @@ jobs:
         with:
           name: PrinterWLAN-v1.2.0-windows-x64
           path: downloaded-artifact
-      - name: Full desktop installation and Windows print-driver test
+      - name: Full desktop installation, spooler, and native-driver test
         shell: pwsh
         run: |
           $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))

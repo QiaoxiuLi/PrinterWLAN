@@ -126,7 +126,7 @@ dotnet publish src/PrinterWLAN/PrinterWLAN.csproj -c Release -r win-x64 --self-c
 
 ## GitHub Actions
 
-CI 首先在 `windows-2025` 执行 locked restore、Release build、单元/集成测试、`win-x64` self-contained publish、依赖下载与 SHA-256 校验、Inno Setup 编译、静默安装、Windows Service/HTTP/CLI/登录/PDF/Word/Fake printer smoke test、Playwright 多 viewport 测试和静默卸载。随后同一个安装包必须在 GitHub 的 Windows 11 Desktop runner 上通过安装、`doctor`、LibreOffice、PDFium、SQLite、服务配置，并通过 Windows 内置 `Microsoft Print to PDF` 驱动和服务可写的本地文件端口产生有效 PDF 输出，Release job 才能继续发布。
+CI 首先在 `windows-2025` 执行 locked restore、Release build、单元/集成测试、`win-x64` self-contained publish、依赖下载与 SHA-256 校验、Inno Setup 编译、静默安装、Windows Service/HTTP/CLI/登录/PDF/Word/Fake printer smoke test、Playwright 多 viewport 测试和静默卸载。随后同一个 x64 安装包必须在 GitHub 的 Windows 11 ARM Desktop runner 上通过安装、`doctor`、LibreOffice、PDFium、SQLite 和服务配置；PrinterWLAN 必须向真实 Spooler 提交非空单页任务，原生 ARM64 控制进程还必须通过同一 `Microsoft Print to PDF` 驱动产生有效 PDF，Release job 才能继续。Windows 10/11 x64 真机不启用 ARM 特例，必须由 PrinterWLAN 端到端生成有效 PDF。
 
 仓库还提供 [`scripts/WindowsClientAcceptance.ps1`](scripts/WindowsClientAcceptance.ps1)。在 Windows 10 x64 真机上运行它，可以执行与 Windows 11 CI 相同的安装、登录、PDF/Word、管理员统一打印机、Windows 打印驱动、服务和卸载前检查，并生成 `compatibility-evidence.json` 验收证据。CI 的 Windows 11 结果不能冒充 Windows 10 真机结果。
 
