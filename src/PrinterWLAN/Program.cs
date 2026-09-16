@@ -92,6 +92,7 @@ try
 catch (Exception exception)
 {
     Log.Fatal(exception, "PrinterWLAN terminated unexpectedly. The HTTP port may be unavailable.");
+    if (Environment.GetEnvironmentVariable("PRINTERWLAN_TEST_RETHROW_STARTUP") == "1") throw;
     return 1;
 }
 finally { await Log.CloseAndFlushAsync(); }

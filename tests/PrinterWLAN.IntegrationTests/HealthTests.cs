@@ -116,6 +116,7 @@ public sealed class PrinterWlanFactory : WebApplicationFactory<Program>, IAsyncL
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         Environment.SetEnvironmentVariable("PRINTERWLAN_DATA_DIR", _directory);
+        Environment.SetEnvironmentVariable("PRINTERWLAN_TEST_RETHROW_STARTUP", "1");
         builder.UseSetting("PrinterWLAN:UseFakePrinter", "true");
     }
     public Task InitializeAsync()
@@ -132,6 +133,7 @@ public sealed class PrinterWlanFactory : WebApplicationFactory<Program>, IAsyncL
         await Log.CloseAndFlushAsync();
         SqliteConnection.ClearAllPools();
         Environment.SetEnvironmentVariable("PRINTERWLAN_DATA_DIR", null);
+        Environment.SetEnvironmentVariable("PRINTERWLAN_TEST_RETHROW_STARTUP", null);
         for (var attempt = 1; attempt <= 10 && Directory.Exists(_directory); attempt++)
         {
             try
