@@ -15,7 +15,7 @@ if ($isWindows10 -and $build -lt 17763) { throw "Windows 10 build $build is olde
 if (-not [Environment]::Is64BitOperatingSystem) { throw 'PrinterWLAN requires 64-bit Windows.' }
 
 New-Item -ItemType Directory -Force $OutputDirectory | Out-Null
-& (Join-Path $PSScriptRoot 'SmokeTest.ps1') -InstallerPath $InstallerPath -OutputDirectory $OutputDirectory -AdminPassword $AdminPassword -PrinterMode SystemDriver
+& (Join-Path $PSScriptRoot 'SmokeTest.ps1') -InstallerPath $InstallerPath -OutputDirectory $OutputDirectory -AdminPassword $AdminPassword -PrinterMode SystemPdf
 
 $service = Get-CimInstance Win32_Service -Filter "Name='PrinterWLAN'"
 if (-not $service -or $service.State -ne 'Running' -or $service.StartMode -ne 'Auto') { throw 'PrinterWLAN is not running as an automatic Windows Service.' }
@@ -37,8 +37,8 @@ $evidence = [ordered]@{
   serviceStartMode = $service.StartMode
   delayedAutomaticStart = $delayed
   serviceDependencies = @($dependencies)
-  realWindowsPrintDriver = 'Generic / Text Only'
-  printedOutput = (Join-Path $OutputDirectory 'windows-driver-output.prn')
+  realWindowsPrintDriver = 'Microsoft Print to PDF'
+  printedOutput = (Join-Path $OutputDirectory 'windows-driver-output.pdf')
   result = 'passed'
 }
 $evidence | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $OutputDirectory 'compatibility-evidence.json') -Encoding utf8

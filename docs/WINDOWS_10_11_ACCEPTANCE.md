@@ -20,7 +20,7 @@ $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator
   -OutputDirectory ./artifacts/windows-10-acceptance
 ```
 
-脚本只接受 Windows 10/11 Desktop，自动使用 Windows 内置 `Generic / Text Only` 驱动和本地文件端口建立临时测试队列。它会验证：
+脚本只接受 Windows 10/11 Desktop，自动使用 Windows 内置 `Microsoft Print to PDF` 驱动和位于 `ProgramData` 诊断目录的本地文件端口建立临时测试队列。它会验证：
 
 - 安装包与 Windows 版本/64 位架构；
 - 内置 .NET 应用、Visual C++ 原生运行库、SQLite、PDFium、SkiaSharp、PDF.js 和 LibreOffice；
@@ -28,12 +28,12 @@ $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator
 - HTTP 健康检查、管理员登录、用户导入和用户登录；
 - 管理员统一选择打印机，用户 API 不暴露或接受打印机身份；
 - 中文文件名 DOCX → PDF、PDF 页面读取与网页打印任务；
-- 任务通过真正的 Windows 打印驱动生成非空 `.prn` 输出文件。
+- 任务通过真正的 Windows 打印驱动生成带 `%PDF-` 文件签名的输出。
 
 成功后会生成：
 
 - `compatibility-evidence.json`：Windows 版本、build、架构、PrinterWLAN 版本和服务配置；
-- `windows-driver-output.prn`：Windows 打印驱动实际输出；
+- `windows-driver-output.pdf`：Windows 打印驱动实际输出；
 - 上传、用户导出等烟雾测试中间证据。
 
 验收脚本不会假装验证物理纸张。使用具体品牌打印机时，还应在管理员后台选择该打印机，以 PDF 和 DOCX 各打印一份，确认纸张、方向、单双面、颜色、纸盒和分辨率与驱动能力一致。

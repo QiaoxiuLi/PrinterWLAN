@@ -24,7 +24,7 @@ printerwlan doctor
 ## 验证升级
 
 - Windows Server 2025：完整构建、单元/集成、安装、服务、HTTP、浏览器、PDF、Word、模拟打印、升级与卸载。
-- Windows 11 Desktop：使用发布候选安装包完成安装和全部内置组件检查，并通过 Windows 内置 `Generic / Text Only` 驱动与本地文件端口实际生成非空打印输出。
+- Windows 11 Desktop：使用发布候选安装包完成安装和全部内置组件检查，并通过 Windows 内置 `Microsoft Print to PDF` 驱动与服务可写的本地文件端口实际生成有效 PDF 输出。
 - Windows 10：提供 `scripts/WindowsClientAcceptance.ps1` 真机验收脚本，执行与 Windows 11 相同的安装、文档和系统打印驱动链路并生成 JSON 证据。
 - v1.1.0 → v1.2.0 升级保留网站名称、用户、凭据、日志、数据库和管理员已选打印机。
 
