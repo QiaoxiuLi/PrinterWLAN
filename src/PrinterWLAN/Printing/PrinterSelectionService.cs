@@ -52,7 +52,8 @@ public sealed class PrinterSelectionService(AppDatabase database, IPrinterServic
         return state.SelectedPrinter;
     }
 
-    public async Task<PrintRequest> BindAsync(PrintSubmissionRequest request, CancellationToken cancellationToken = default)
+    public async Task<PrintRequest> CreateRequestAsync(PrintSubmissionRequest request,
+        CancellationToken cancellationToken = default)
     {
         var printer = await GetSelectedAsync(cancellationToken);
         return new PrintRequest

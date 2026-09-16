@@ -15,7 +15,7 @@ public sealed class PrintJobService(AppDatabase database, IPrinterService printe
         DocumentRecord document, PrintSubmissionRequest submission, string sessionId, string? deviceId,
         string? ipAddress, CancellationToken cancellationToken)
     {
-        var request = await selection.BindAsync(submission, cancellationToken);
+        var request = await selection.CreateRequestAsync(submission, cancellationToken);
         request.SelectedPages = PageRangeParser.Parse(request.PageRange, document.TotalPages);
         PageRangeParser.ValidateJobLimit(request.SelectedPages.Count, request.Copies);
         await printers.ValidateAsync(request, cancellationToken);

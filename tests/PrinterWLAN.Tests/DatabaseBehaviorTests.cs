@@ -111,12 +111,12 @@ public sealed class DatabaseBehaviorTests : IDisposable
         Assert.Equal("当前暂未配置打印机，请联系管理员。", unconfigured.Message);
 
         await firstService.SelectAsync(FakePrinterService.Capability.Id);
-        var queuedForA = await firstService.BindAsync(NewSubmission());
+        var queuedForA = await firstService.CreateRequestAsync(NewSubmission());
         var restartedService = new PrinterSelectionService(new AppDatabase(paths), new FakePrinterService());
         Assert.Equal(FakePrinterService.Capability.Id, (await restartedService.GetStateAsync()).SelectedPrinterId);
 
         await restartedService.SelectAsync(FakePrinterService.SecondaryCapability.Id);
-        var queuedForB = await restartedService.BindAsync(NewSubmission() with { ColorMode = "monochrome" });
+        var queuedForB = await restartedService.CreateRequestAsync(NewSubmission() with { ColorMode = "monochrome" });
 
         Assert.Equal(FakePrinterService.Capability.Id, queuedForA.PrinterId);
         Assert.Equal(FakePrinterService.Capability.Name, queuedForA.PrinterName);
