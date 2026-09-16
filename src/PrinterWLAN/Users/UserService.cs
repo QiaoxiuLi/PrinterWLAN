@@ -150,7 +150,9 @@ public sealed class UserService(AppDatabase database, PasswordService passwords,
         await using var connection = await database.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         var safeQuery = query?.Trim() ?? string.Empty;
-        command.CommandText = "SELECT COUNT(*) FROM users WHERE $query='' OR username LIKE $like ESCAPE '\'";
+        command.CommandText = """
+            SELECT COUNT(*) FROM users WHERE $query='' OR username LIKE $like ESCAPE '\'
+            """;
         command.Parameters.AddWithValue("$query", safeQuery);
         command.Parameters.AddWithValue("$like", $"%{EscapeLike(safeQuery)}%");
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);

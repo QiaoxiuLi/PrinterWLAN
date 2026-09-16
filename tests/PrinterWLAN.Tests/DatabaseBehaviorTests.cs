@@ -33,6 +33,8 @@ public sealed class DatabaseBehaviorTests : IDisposable
         Assert.NotNull(updated); Assert.Equal(original.Sequence, updated.Sequence); Assert.NotEqual(oldPassword, users.RevealPassword(updated));
         var ordered = await users.ListAsync(null, 1, 20);
         Assert.Equal(["张三", "Alice", "李四"], ordered.Select(x => x.Username));
+        Assert.Equal(1, await users.CountAsync("张"));
+        Assert.Equal(0, await users.CountAsync("%"));
         await using var export = new MemoryStream(); await users.WriteCredentialsCsvAsync(export);
         Assert.True(export.ToArray().AsSpan().StartsWith(System.Text.Encoding.UTF8.GetPreamble()));
     }
