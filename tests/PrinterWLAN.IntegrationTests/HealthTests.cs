@@ -78,7 +78,10 @@ public sealed class HealthTests : IClassFixture<PrinterWlanFactory>
         var capabilitiesJson = await _client.GetStringAsync("/api/user/print-capabilities");
         Assert.DoesNotContain("printerName", capabilitiesJson, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(FakePrinterService.Capability.Name, capabilitiesJson, StringComparison.Ordinal);
-        Assert.Equal(System.Net.HttpStatusCode.NotFound, (await _client.GetAsync("/api/user/printers")).StatusCode);
+        var removedPrinterList = await _client.GetAsync("/api/user/printers");
+        Assert.Equal("text/html", removedPrinterList.Content.Headers.ContentType?.MediaType);
+        Assert.DoesNotContain(FakePrinterService.Capability.Name,
+            await removedPrinterList.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
         foreach (var field in new[] { "printer", "printerId", "printerName", "targetPrinter" })
         {
