@@ -2,6 +2,11 @@
 
 本版本将打印机选择权从普通用户端统一移交给管理员。
 
+## 普通用户说明
+
+- [下载 PrinterWLAN v1.1.0 普通用户使用说明 PDF](https://github.com/QiaoxiuLi/PrinterWLAN/releases/download/v1.1.0/PrinterWLAN-v1.1.0-User-Guide-zh-CN.pdf)
+- 普通用户无需安装软件，也不需要选择打印机；在浏览器登录、上传文件、确认预览和打印参数后提交即可。
+
 ## 主要变化
 
 - 管理后台新增“打印机设置”，显示 Windows 已安装打印机、状态、Windows 默认标记和 PrinterWLAN 当前打印机。
