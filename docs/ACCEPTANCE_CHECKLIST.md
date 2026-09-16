@@ -88,5 +88,5 @@
 - [x] 第三方 Notice/License 打包
 - [x] README、Release Notes、MIT License
 - [x] `windows-2025` CI 与 `v*` Release workflow、`contents: write`、官方 `gh`
-- [ ] `v1.1.0` tag workflow 全部通过
-- [ ] v1.1.0 正式非 Draft、非 Prerelease GitHub Release 已发布
+- [x] `v1.1.0` tag workflow 全部通过
+- [x] v1.1.0 正式非 Draft、非 Prerelease GitHub Release 已发布
