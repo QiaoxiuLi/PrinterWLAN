@@ -112,14 +112,22 @@ public sealed class HealthTests : IClassFixture<PrinterWlanFactory>
 public sealed class PrinterWlanFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "PrinterWLAN-tests-" + Guid.NewGuid().ToString("N"));
+    private HttpClient? _warmupClient;
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         Environment.SetEnvironmentVariable("PRINTERWLAN_DATA_DIR", _directory);
         builder.UseSetting("PrinterWLAN:UseFakePrinter", "true");
     }
-    public Task InitializeAsync() => Task.CompletedTask;
+    public Task InitializeAsync()
+    {
+        // WebApplicationFactory's first CreateClient call is not safe when several xUnit test instances
+        // are constructed concurrently. Start the shared server before any test constructor runs.
+        _warmupClient = CreateClient();
+        return Task.CompletedTask;
+    }
     public new async Task DisposeAsync()
     {
+        _warmupClient?.Dispose();
         await base.DisposeAsync();
         await Log.CloseAndFlushAsync();
         SqliteConnection.ClearAllPools();
