@@ -57,6 +57,13 @@ if ($LASTEXITCODE -ne 0) { throw 'printerwlan pwd failed.' }
 $admin=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $admin | Out-Null
 Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $admin -Headers (Get-Headers $admin) -ContentType 'application/json' -Body (@{password=$AdminPassword}|ConvertTo-Json) | Out-Null
+$printerState=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $admin
+if ($printerState.printers.Count -ne 2) { throw 'Fake printer inventory was not available to the administrator.' }
+$selectedPrinter=$printerState.printers | Where-Object name -eq 'PrinterWLAN Test Printer A' | Select-Object -First 1
+if (-not $selectedPrinter) { throw 'Primary fake printer was not found.' }
+Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printer' -Method Put -WebSession $admin -Headers (Get-Headers $admin) -ContentType 'application/json' -Body (@{printerId=$selectedPrinter.id}|ConvertTo-Json) | Out-Null
+$persistedPrinter=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $admin
+if ($persistedPrinter.selectedPrinterId -ne $selectedPrinter.id) { throw 'Administrator printer selection did not persist.' }
 $csvPath=Join-Path $OutputDirectory 'users.csv'; [IO.File]::WriteAllText($csvPath,"用户名`r`n测试用户`r`n",[Text.UTF8Encoding]::new($true))
 Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/users/import' -Method Post -WebSession $admin -Headers (Get-Headers $admin) -Form @{file=Get-Item $csvPath} | Out-Null
 $exportPath=Join-Path $OutputDirectory 'users-export.csv'
@@ -71,9 +78,9 @@ Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSessio
 $pdfPath=Join-Path $OutputDirectory 'sample.pdf';New-TestPdf $pdfPath
 $upload=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/documents' -Method Post -WebSession $user -Headers (Get-Headers $user) -Form @{file=Get-Item $pdfPath;clientLastModified='2026-09-15T00:00:00Z'}
 if ($upload.totalPages -ne 1) { throw 'PDF page count smoke test failed.' }
-$printers=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/printers' -WebSession $user
-if ($printers.Count -ne 1 -or $printers[0].name -ne 'PrinterWLAN Test Printer') { throw 'Fake printer was not active.' }
-$jobRequest=@{documentId=$upload.id;printerName=$printers[0].name;paperSize='A4';orientation='portrait';duplex='simplex';pageRange='all';copies=1;collate=$true;colorMode='color';paperSource='Auto';resolution='0:600:600';scaleMode='fit';scalePercent=100;center=$true}|ConvertTo-Json
+$capabilities=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/print-capabilities' -WebSession $user
+if (-not $capabilities.available -or $capabilities.PSObject.Properties.Name -contains 'name' -or $capabilities.PSObject.Properties.Name -contains 'id') { throw 'User capability endpoint exposed an invalid printer state or identity.' }
+$jobRequest=@{documentId=$upload.id;paperSize='A4';orientation='portrait';duplex='simplex';pageRange='all';copies=1;collate=$true;colorMode='color';paperSource='Auto';resolution='0:600:600';scaleMode='fit';scalePercent=100;center=$true}|ConvertTo-Json
 $job=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/jobs' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json' -Body $jobRequest
 for($i=0;$i -lt 30;$i++){ $status=Invoke-RestMethod "http://127.0.0.1:8080/api/user/jobs/$($job.jobId)" -WebSession $user;if($status.status -eq 'sent'){break};if($status.status -eq 'failed'){throw $status.friendlyError};Start-Sleep -Milliseconds 500 }
 if ($status.status -ne 'sent') { throw 'Fake printer job did not reach sent state.' }

@@ -1,4 +1,4 @@
-# PrinterWLAN v1.0.0 Acceptance Checklist
+# PrinterWLAN v1.1.0 Acceptance Checklist
 
 只有 Windows Server 2025 Release workflow 实际通过后，发布提交才会把所有硬性项目标记为完成。本清单中的实现项均有源码或自动测试路径；真实纸张输出单独注明，不用 Fake 结果冒充物理打印。
 
@@ -33,6 +33,9 @@
 - [x] 用户列表不预传明文，按需显示/复制
 - [x] UTF-8 BOM 凭据 CSV 严格按 sequence 导出
 - [x] 网站名称修改同步到用户可见页面和标题
+- [x] 管理员独占 Windows 打印机列表、状态、默认标记和当前打印机选择
+- [x] 当前打印机服务端持久化，服务重启后保留；v1.0 升级默认不自动选择
+- [x] 普通用户无法获取打印机列表、名称或 ID，提交模型拒绝打印机字段注入
 
 ## 文档与打印
 
@@ -44,7 +47,9 @@
 - [x] 文件名/扩展名/检测 MIME/大小/四类时间/页数元数据
 - [x] 成功、失败、取消和约 60 分钟过期清理；启动/每小时清理残留
 - [x] 文件正文不进入数据库、日志、导出或缓存
-- [x] Windows 实时打印机列表与默认打印机
+- [x] Windows 实时打印机列表、默认打印机和队列状态仅供管理员查看
+- [x] 未配置、已删除、改名、离线或不可用时阻止提交且不自动回退
+- [x] 任务提交时冻结管理员所选打印机；管理员切换只影响之后的新任务
 - [x] 动态纸张、方向、单双面、页码、份数、逐份、颜色、纸盒、分辨率、缩放、居中
 - [x] 提交与实际打印前再次验证驱动能力
 - [x] page range 去重、排序、非法值与越界检查
@@ -77,11 +82,11 @@
 - [x] 320/360/390/768/1366/1920 Playwright viewport 覆盖
 - [x] 手机预览在上、设置在下；桌面 60/40；移动管理顶部导航
 - [x] nowrap/min-width/320px 防止短标签单字换行
-- [x] 登录、CSV、顺序、密码显示、导出、预览、20 页和日志 UI 测试
+- [x] 登录、CSV、顺序、密码显示、导出、管理员打印机选择持久化、用户无选择器、预览、20 页和日志 UI 测试
 - [x] Unit、Integration、Fake printer 与 installer smoke test 工程
 - [x] 固定依赖、官方 URL、SHA-256 和 machine-readable manifest
 - [x] 第三方 Notice/License 打包
 - [x] README、Release Notes、MIT License
 - [x] `windows-2025` CI 与 `v*` Release workflow、`contents: write`、官方 `gh`
-- [x] `v1.0.0` tag workflow 全部通过
-- [x] 正式非 Draft、非 Prerelease GitHub Release 已发布
+- [ ] `v1.1.0` tag workflow 全部通过
+- [ ] v1.1.0 正式非 Draft、非 Prerelease GitHub Release 已发布

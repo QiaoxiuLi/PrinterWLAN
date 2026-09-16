@@ -6,13 +6,16 @@ using PrinterWLAN.Storage;
 
 namespace PrinterWLAN.Printing;
 
-public sealed class PrintJobService(AppDatabase database, IPrinterService printers, PrintJobQueue queue)
+public sealed class PrintJobService(AppDatabase database, IPrinterService printers, PrinterSelectionService selection,
+    PrintJobQueue queue)
 {
     private readonly SemaphoreSlim _createLock = new(1, 1);
 
-    public async Task<(PrintJobRecord? Job, int RetryAfter)> CreateAsync(UserRecord user, DocumentRecord document,
-        PrintRequest request, string sessionId, string? deviceId, string? ipAddress, CancellationToken cancellationToken)
+    public async Task<(PrintJobRecord? Job, int RetryAfter, PrintRequest Request)> CreateAsync(UserRecord user,
+        DocumentRecord document, PrintSubmissionRequest submission, string sessionId, string? deviceId,
+        string? ipAddress, CancellationToken cancellationToken)
     {
+        var request = await selection.BindAsync(submission, cancellationToken);
         request.SelectedPages = PageRangeParser.Parse(request.PageRange, document.TotalPages);
         PageRangeParser.ValidateJobLimit(request.SelectedPages.Count, request.Copies);
         await printers.ValidateAsync(request, cancellationToken);
@@ -32,7 +35,7 @@ public sealed class PrintJobService(AppDatabase database, IPrinterService printe
                 if (elapsed < TimeSpan.FromSeconds(60))
                 {
                     await transaction.RollbackAsync(cancellationToken);
-                    return (null, Math.Max(1, 60 - (int)elapsed.TotalSeconds));
+                    return (null, Math.Max(1, 60 - (int)elapsed.TotalSeconds), request);
                 }
             }
             var now = DateTimeOffset.UtcNow;
@@ -72,7 +75,7 @@ public sealed class PrintJobService(AppDatabase database, IPrinterService printe
             await transaction.CommitAsync(cancellationToken);
             var job = new PrintJobRecord(id, user.Id, user.Username, document.Id, "queued", json, now, null, null, null, null, null, sessionId, deviceId, ipAddress);
             await queue.EnqueueAsync(id, cancellationToken);
-            return (job, 0);
+            return (job, 0, request);
         }
         finally { _createLock.Release(); }
     }

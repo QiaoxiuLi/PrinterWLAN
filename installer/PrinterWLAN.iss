@@ -1,5 +1,5 @@
 #define MyAppName "PrinterWLAN"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "QIAOXIU LI"
 #define MyAppExeName "PrinterWLAN.exe"
 
@@ -20,9 +20,9 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 WizardStyle=modern
 UninstallDisplayName=PrinterWLAN
-VersionInfoVersion=1.0.0.0
+VersionInfoVersion=1.1.0.0
 VersionInfoProductName=PrinterWLAN
-VersionInfoProductVersion=1.0.0
+VersionInfoProductVersion=1.1.0
 VersionInfoCompany=QIAOXIU LI
 LicenseFile=..\LICENSE
 

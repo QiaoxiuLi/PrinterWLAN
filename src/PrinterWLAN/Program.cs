@@ -48,6 +48,7 @@ try
     builder.Services.AddSingleton<DocumentService>();
     builder.Services.AddSingleton<ActivityLogService>();
     builder.Services.AddSingleton<PrintJobQueue>();
+    builder.Services.AddSingleton<PrinterSelectionService>();
     builder.Services.AddSingleton<PrintJobService>();
     if (configured.UseFakePrinter) builder.Services.AddSingleton<IPrinterService, FakePrinterService>();
     else builder.Services.AddSingleton<IPrinterService, WindowsPrinterService>();
@@ -84,7 +85,7 @@ try
     app.UseAuthorization();
     app.MapPrinterWlanApi();
     app.MapFallbackToFile("index.html");
-    Log.Information("PrinterWLAN 1.0.0 starting on HTTP port {Port}", configured.Port);
+    Log.Information("PrinterWLAN 1.1.0 starting on HTTP port {Port}", configured.Port);
     await app.RunAsync();
     return 0;
 }

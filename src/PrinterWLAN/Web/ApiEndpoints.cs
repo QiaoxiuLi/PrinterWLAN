@@ -39,7 +39,7 @@ public static class ApiEndpoints
                 adminConfigured = await admin.IsConfiguredAsync(token),
                 userAuthenticated = userAuth.Succeeded,
                 adminAuthenticated = adminAuth.Succeeded,
-                version = "1.0.0"
+                version = "1.1.0"
             });
         });
 
@@ -104,7 +104,27 @@ public static class ApiEndpoints
             await context.SignOutAsync("UserCookie");
             return Results.NoContent();
         });
-        group.MapGet("/printers", async (IPrinterService printers, CancellationToken token) => Results.Ok(await printers.GetPrintersAsync(token)));
+        group.MapGet("/print-capabilities", async (PrinterSelectionService selection, CancellationToken token) =>
+        {
+            var state = await selection.GetStateAsync(token);
+            var printer = state.SelectedPrinter;
+            if (state.Status == "unconfigured")
+                return Results.Ok(new { configured = false, available = false, message = "当前暂未配置打印机，请联系管理员。" });
+            if (printer is null || !printer.IsValid || printer.Status is "offline" or "unavailable")
+                return Results.Ok(new { configured = true, available = false, message = "管理员设置的打印机当前不可用，请联系管理员。" });
+            return Results.Ok(new
+            {
+                configured = true,
+                available = true,
+                printer.SupportsColor,
+                printer.CanDuplex,
+                printer.MaximumCopies,
+                printer.SupportsCollate,
+                printer.PaperSizes,
+                printer.PaperSources,
+                printer.Resolutions
+            });
+        });
         group.MapPost("/documents", async (HttpRequest request, HttpContext context, AppDatabase database,
             DocumentService documents, ActivityLogService logs, CancellationToken token) =>
         {
@@ -136,7 +156,7 @@ public static class ApiEndpoints
             if (document is not null) await documents.DeleteAsync(document, token);
             return Results.NoContent();
         });
-        group.MapPost("/jobs", async ([FromBody] PrintRequest request, HttpContext context, AppDatabase database,
+        group.MapPost("/jobs", async ([FromBody] PrintSubmissionRequest request, HttpContext context, AppDatabase database,
             UserService users, PrintJobService jobs, ActivityLogService logs, CancellationToken token) =>
         {
             var user = await users.FindByIdAsync(context.User.UserId(), token);
@@ -146,7 +166,15 @@ public static class ApiEndpoints
             {
                 var result = await jobs.CreateAsync(user, document, request, context.User.SessionId(), context.Request.Headers["X-Device-Id"].FirstOrDefault(), context.Connection.RemoteIpAddress?.ToString(), token);
                 if (result.Job is null) return Results.Json(new { message = $"请稍后再创建新的打印任务，约需等待 {result.RetryAfter} 秒。", retryAfter = result.RetryAfter }, statusCode: 429);
-                await logs.WriteAsync(ActivityFactory.From(context, "print_submitted", JsonSerializer.Serialize(new { jobId = result.Job.Id, documentId = document.Id, request.PrinterName, request.PageRange, request.Copies })), token);
+                await logs.WriteAsync(ActivityFactory.From(context, "print_submitted", JsonSerializer.Serialize(new
+                {
+                    jobId = result.Job.Id,
+                    documentId = document.Id,
+                    result.Request.PrinterId,
+                    result.Request.PrinterName,
+                    result.Request.PageRange,
+                    result.Request.Copies
+                })), token);
                 return Results.Accepted($"/api/user/jobs/{result.Job.Id}", new { jobId = result.Job.Id, status = result.Job.Status });
             }
             catch (Exception exception) when (exception is FormatException or PrintValidationException)
@@ -170,13 +198,41 @@ public static class ApiEndpoints
             await context.SignOutAsync("AdminCookie");
             return Results.NoContent();
         });
-        group.MapGet("/settings", async (AppDatabase database, CancellationToken token) => Results.Ok(new { siteName = await database.GetSettingAsync("site_name", "PrinterWLAN", token), version = "1.0.0" }));
+        group.MapGet("/settings", async (AppDatabase database, CancellationToken token) => Results.Ok(new { siteName = await database.GetSettingAsync("site_name", "PrinterWLAN", token), version = "1.1.0" }));
         group.MapPut("/settings", async ([FromBody] SiteSettings request, AppDatabase database, CancellationToken token) =>
         {
             var name = request.SiteName?.Trim();
             if (string.IsNullOrEmpty(name) || name.Length > 80) return Results.BadRequest(new { message = "网站名称需要 1 到 80 个字符。" });
             await database.SetSettingAsync("site_name", name, token);
             return Results.Ok(new { siteName = name });
+        });
+        group.MapGet("/printers", async (PrinterSelectionService selection, CancellationToken token) =>
+        {
+            var state = await selection.GetStateAsync(token);
+            return Results.Ok(new
+            {
+                state.SelectedPrinterId,
+                state.SelectedPrinterName,
+                state.Status,
+                printers = state.Printers
+            });
+        });
+        group.MapPut("/printer", async ([FromBody] AdminPrinterSelection request, HttpContext context,
+            PrinterSelectionService selection, ActivityLogService logs, CancellationToken token) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.PrinterId))
+                return Results.BadRequest(new { message = "请选择一台打印机。" });
+            try
+            {
+                var printer = await selection.SelectAsync(request.PrinterId, token);
+                await logs.WriteAsync(ActivityFactory.From(context, "printer_selected",
+                    JsonSerializer.Serialize(new { printer.Id, printer.Name })), token);
+                return Results.Ok(new { printer.Id, printer.Name, printer.Status });
+            }
+            catch (PrintValidationException exception)
+            {
+                return Results.BadRequest(new { message = exception.Message });
+            }
         });
         group.MapPost("/users/import", async (HttpRequest request, UserService users, CancellationToken token) =>
         {
@@ -235,4 +291,6 @@ public static class ApiEndpoints
     public sealed record BrowserEvent(string Type, string? Page);
     public sealed record SiteSettings(string? SiteName);
     public sealed record ExportRequest(string[]? Slices);
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+    public sealed record AdminPrinterSelection(string? PrinterId);
 }

@@ -24,8 +24,11 @@ public sealed class WindowsPrinterService(ILogger<WindowsPrinterService> logger)
 
     public async Task<PrinterCapability> ValidateAsync(PrintRequest request, CancellationToken cancellationToken = default)
     {
-        var printer = (await GetPrintersAsync(cancellationToken)).FirstOrDefault(p => p.Name.Equals(request.PrinterName, StringComparison.Ordinal));
-        if (printer is null || !printer.IsValid) throw new PrintValidationException("所选打印机当前不可用，请重新选择。");
+        var printer = (await GetPrintersAsync(cancellationToken)).FirstOrDefault(p =>
+            p.Id.Equals(request.PrinterId, StringComparison.Ordinal) &&
+            p.Name.Equals(request.PrinterName, StringComparison.Ordinal));
+        if (printer is null || !printer.IsValid || printer.Status is "offline" or "unavailable")
+            throw new PrintValidationException("管理员设置的打印机当前不可用，请联系管理员。");
         if (!printer.PaperSizes.Any(p => p.Name.Equals(request.PaperSize, StringComparison.Ordinal))) throw new PrintValidationException("所选纸张大小已不可用，请重新选择。");
         if (!request.Duplex.Equals("simplex", StringComparison.OrdinalIgnoreCase) && !printer.CanDuplex) throw new PrintValidationException("这台打印机不支持双面打印。");
         if (request.ColorMode.Equals("color", StringComparison.OrdinalIgnoreCase) && !printer.SupportsColor) throw new PrintValidationException("这台打印机不支持彩色打印。");
@@ -113,7 +116,9 @@ public sealed class WindowsPrinterService(ILogger<WindowsPrinterService> logger)
         var sources = settings.PaperSources.Cast<PaperSource>().Select(p => new SourceCapability(p.SourceName, (int)p.RawKind)).ToArray();
         var resolutions = settings.PrinterResolutions.Cast<PrinterResolution>().Select(p => new ResolutionCapability(
             string.IsNullOrWhiteSpace(p.ToString()) ? $"{p.X} × {p.Y} dpi" : p.ToString(), p.X, p.Y, (int)p.Kind)).ToArray();
-        return new PrinterCapability(name, settings.IsDefaultPrinter, settings.IsValid, settings.SupportsColor, settings.CanDuplex,
+        var status = settings.IsValid ? NativeMethods.GetStatus(name) : "unavailable";
+        return new PrinterCapability(PrinterIdentity.FromName(name), name, settings.IsDefaultPrinter, settings.IsValid, status,
+            settings.SupportsColor, settings.CanDuplex,
             Math.Max(1, settings.MaximumCopies), NativeMethods.SupportsCollate(name), papers, sources, resolutions);
     }
 
@@ -128,9 +133,79 @@ public sealed class WindowsPrinterService(ILogger<WindowsPrinterService> logger)
     private static class NativeMethods
     {
         private const short DcCollate = 22;
+        private const uint PrinterStatusPaused = 0x00000001;
+        private const uint PrinterStatusError = 0x00000002;
+        private const uint PrinterStatusPaperJam = 0x00000008;
+        private const uint PrinterStatusPaperOut = 0x00000010;
+        private const uint PrinterStatusManualFeed = 0x00000020;
+        private const uint PrinterStatusPaperProblem = 0x00000040;
+        private const uint PrinterStatusOffline = 0x00000080;
+        private const uint PrinterStatusNotAvailable = 0x00001000;
+        private const uint PrinterStatusUserIntervention = 0x00100000;
+        private const uint PrinterStatusDoorOpen = 0x00400000;
+        private const uint PrinterStatusServerUnknown = 0x00800000;
+        private const uint UnavailableMask = PrinterStatusError | PrinterStatusPaperJam | PrinterStatusPaperOut |
+            PrinterStatusManualFeed | PrinterStatusPaperProblem | PrinterStatusUserIntervention | PrinterStatusDoorOpen;
+        private const uint OfflineMask = PrinterStatusPaused | PrinterStatusOffline | PrinterStatusNotAvailable |
+            PrinterStatusServerUnknown;
+
         [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern int DeviceCapabilities(string device, string? port, short capability, IntPtr output, IntPtr devMode);
+        [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool OpenPrinter(string printerName, out IntPtr printer, IntPtr defaults);
+        [DllImport("winspool.drv", SetLastError = true)]
+        private static extern bool GetPrinter(IntPtr printer, uint level, IntPtr buffer, uint size, out uint needed);
+        [DllImport("winspool.drv", SetLastError = true)]
+        private static extern bool ClosePrinter(IntPtr printer);
+
         internal static bool SupportsCollate(string printerName) => DeviceCapabilities(printerName, null, DcCollate, IntPtr.Zero, IntPtr.Zero) > 0;
+
+        internal static string GetStatus(string printerName)
+        {
+            if (!OpenPrinter(printerName, out var printer, IntPtr.Zero)) return "unknown";
+            try
+            {
+                _ = GetPrinter(printer, 2, IntPtr.Zero, 0, out var needed);
+                if (needed == 0) return "unknown";
+                var buffer = Marshal.AllocHGlobal(checked((int)needed));
+                try
+                {
+                    if (!GetPrinter(printer, 2, buffer, needed, out _)) return "unknown";
+                    var status = Marshal.PtrToStructure<PrinterInfo2>(buffer).Status;
+                    if ((status & OfflineMask) != 0) return "offline";
+                    return (status & UnavailableMask) != 0 ? "unavailable" : "ready";
+                }
+                finally { Marshal.FreeHGlobal(buffer); }
+            }
+            catch { return "unknown"; }
+            finally { ClosePrinter(printer); }
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct PrinterInfo2
+        {
+            public IntPtr ServerName;
+            public IntPtr PrinterName;
+            public IntPtr ShareName;
+            public IntPtr PortName;
+            public IntPtr DriverName;
+            public IntPtr Comment;
+            public IntPtr Location;
+            public IntPtr DevMode;
+            public IntPtr SeparatorFile;
+            public IntPtr PrintProcessor;
+            public IntPtr DataType;
+            public IntPtr Parameters;
+            public IntPtr SecurityDescriptor;
+            public uint Attributes;
+            public uint Priority;
+            public uint DefaultPriority;
+            public uint StartTime;
+            public uint UntilTime;
+            public uint Status;
+            public uint JobCount;
+            public uint AveragePagesPerMinute;
+        }
     }
 }
 

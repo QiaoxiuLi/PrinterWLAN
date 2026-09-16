@@ -2,7 +2,11 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using PrinterWLAN.Authentication;
+using PrinterWLAN.Printing;
+using PrinterWLAN.Users;
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Serilog;
 
@@ -21,7 +25,7 @@ public sealed class HealthTests : IClassFixture<PrinterWlanFactory>
         Assert.DoesNotContain("database", body, StringComparison.OrdinalIgnoreCase);
     }
     [Fact] public async Task AnonymousCannotAccessAdminApi() => Assert.Equal(System.Net.HttpStatusCode.Unauthorized, (await _client.GetAsync("/api/admin/users")).StatusCode);
-    [Fact] public async Task AnonymousCannotAccessPrinterApi() => Assert.Equal(System.Net.HttpStatusCode.Unauthorized, (await _client.GetAsync("/api/user/printers")).StatusCode);
+    [Fact] public async Task AnonymousCannotAccessPrinterApi() => Assert.Equal(System.Net.HttpStatusCode.Unauthorized, (await _client.GetAsync("/api/user/print-capabilities")).StatusCode);
 
     [Fact]
     public async Task AdminCannotClearLogsWithoutPasswordReentry()
@@ -40,6 +44,68 @@ public sealed class HealthTests : IClassFixture<PrinterWlanFactory>
         { Content = JsonContent.Create(new { password = "wrong" }) };
         clear.Headers.Add("X-CSRF-Token", csrf);
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, (await _client.SendAsync(clear)).StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminSelectsPrinterWhileUserGetsNoPrinterIdentityAndCannotInjectOne()
+    {
+        var csrf = await BootstrapAndGetCsrfAsync();
+        var admin = _factory.Services.GetRequiredService<AdminService>();
+        var adminPassword = "Integration-" + Guid.NewGuid().ToString("N");
+        await admin.SetPasswordAsync(adminPassword);
+        using var adminLogin = JsonRequest(HttpMethod.Post, "/api/admin-login", csrf, new { password = adminPassword });
+        Assert.True((await _client.SendAsync(adminLogin)).IsSuccessStatusCode);
+
+        var before = await _client.GetFromJsonAsync<JsonElement>("/api/admin/printers");
+        var printers = before.GetProperty("printers");
+        Assert.Equal(2, printers.GetArrayLength());
+        var selectedId = printers[0].GetProperty("id").GetString();
+        using var select = JsonRequest(HttpMethod.Put, "/api/admin/printer", csrf, new { printerId = selectedId });
+        Assert.True((await _client.SendAsync(select)).IsSuccessStatusCode);
+        var after = await _client.GetFromJsonAsync<JsonElement>("/api/admin/printers");
+        Assert.Equal(selectedId, after.GetProperty("selectedPrinterId").GetString());
+
+        var users = _factory.Services.GetRequiredService<UserService>();
+        var username = "api-user-" + Guid.NewGuid().ToString("N")[..8];
+        await using var csv = new MemoryStream(Encoding.UTF8.GetBytes(username + "\n"));
+        await users.ImportAsync(csv);
+        var user = await users.FindByUsernameAsync(username);
+        Assert.NotNull(user);
+        using var userLogin = JsonRequest(HttpMethod.Post, "/api/user-login", csrf,
+            new { username, password = users.RevealPassword(user) });
+        Assert.True((await _client.SendAsync(userLogin)).IsSuccessStatusCode);
+
+        var capabilitiesJson = await _client.GetStringAsync("/api/user/print-capabilities");
+        Assert.DoesNotContain("printerName", capabilitiesJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(FakePrinterService.Capability.Name, capabilitiesJson, StringComparison.Ordinal);
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, (await _client.GetAsync("/api/user/printers")).StatusCode);
+
+        foreach (var field in new[] { "printer", "printerId", "printerName", "targetPrinter" })
+        {
+            using var injected = JsonRequest(HttpMethod.Post, "/api/user/jobs", csrf,
+                new Dictionary<string, object?>
+                {
+                    ["documentId"] = "missing",
+                    ["paperSize"] = "A4",
+                    [field] = FakePrinterService.SecondaryCapability.Name
+                });
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, (await _client.SendAsync(injected)).StatusCode);
+        }
+    }
+
+    private async Task<string> BootstrapAndGetCsrfAsync()
+    {
+        var bootstrap = await _client.GetAsync("/api/bootstrap");
+        var setCookie = bootstrap.Headers.GetValues("Set-Cookie")
+            .Single(value => value.StartsWith("PrinterWLAN-CSRF=", StringComparison.Ordinal));
+        return setCookie.Split(';')[0].Split('=')[1];
+    }
+
+    private static HttpRequestMessage JsonRequest(HttpMethod method, string path, string csrf, object body)
+    {
+        var request = new HttpRequestMessage(method, path) { Content = JsonContent.Create(body) };
+        request.Headers.Add("X-CSRF-Token", csrf);
+        return request;
     }
 }
 

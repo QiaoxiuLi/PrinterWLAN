@@ -28,6 +28,7 @@ jobs:
           $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
           "PRINTERWLAN_ADMIN_PASSWORD=$password" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
           $env:PRINTERWLAN_ADMIN_PASSWORD=$password
+          ./scripts/UpgradeTest.ps1 -CurrentInstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe
           ./scripts/SmokeTest.ps1 -InstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe
       - name: Playwright UI tests
         shell: pwsh
@@ -50,4 +51,4 @@ jobs:
           gh release create '${{ github.ref_name }}' `
             'artifacts/installer/PrinterWLAN-Setup-x64.exe' `
             'artifacts/installer/PrinterWLAN-Setup-x64.exe.sha256' `
-            --verify-tag --title 'PrinterWLAN v1.0.0' --notes-file docs/RELEASE_NOTES_v1.0.0.md
+            --verify-tag --title 'PrinterWLAN v1.1.0' --notes-file docs/RELEASE_NOTES_v1.1.0.md

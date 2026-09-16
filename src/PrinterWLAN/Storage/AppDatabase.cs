@@ -135,6 +135,27 @@ public sealed class AppDatabase(AppPaths paths)
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task SetSettingsAsync(IReadOnlyDictionary<string, string> settings,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        foreach (var (key, value) in settings)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                INSERT INTO settings(key,value,updated_at) VALUES($key,$value,$now)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at;
+                """;
+            command.Parameters.AddWithValue("$key", key);
+            command.Parameters.AddWithValue("$value", value);
+            command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task SaveDocumentAsync(DocumentRecord document, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);

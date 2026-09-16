@@ -36,6 +36,7 @@ public sealed class PrintWorker(PrintJobQueue queue, AppDatabase database, IPrin
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
+            await printer.ValidateAsync(request, cancellationToken);
             await printer.SubmitAsync(document, request, jobId, cancellationToken);
             stopwatch.Stop();
             await database.UpdateJobAsync(jobId, "sent", cancellationToken: cancellationToken);
@@ -67,7 +68,7 @@ public sealed class PrintWorker(PrintJobQueue queue, AppDatabase database, IPrin
         {
             jobId = job.Id, document.OriginalFilename, document.Extension, document.DetectedMime, document.FileSize,
             document.ClientLastModified, document.DocumentCreatedAt, document.DocumentModifiedAt, document.TotalPages,
-            request.PrinterName, request.PaperSize, request.Orientation, request.ColorMode, request.Duplex, request.PageRange,
+            request.PrinterId, request.PrinterName, request.PaperSize, request.Orientation, request.ColorMode, request.Duplex, request.PageRange,
             selectedPageCount = request.SelectedPages.Count, request.Copies,
             totalRequestedPages = request.SelectedPages.Count * request.Copies, request.Collate, request.PaperSource,
             request.Resolution, request.ScaleMode, request.ScalePercent, request.Center,

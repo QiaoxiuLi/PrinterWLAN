@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using PrinterWLAN.Authentication;
 using PrinterWLAN.Logging;
 using PrinterWLAN.Models;
+using PrinterWLAN.Printing;
 using PrinterWLAN.Storage;
 using PrinterWLAN.Users;
 
@@ -81,6 +82,54 @@ public sealed class DatabaseBehaviorTests : IDisposable
         Assert.False(File.Exists(Path.Combine(paths.Logs, "PrinterWLAN_2020-01-01_to_2020-01-10.zip")));
         Assert.True(File.Exists(Path.Combine(paths.Logs, "PrinterWLAN_2020-01-11_to_2020-01-20.zip")));
     }
+
+    [Fact]
+    public async Task UpgradePreservesExistingDataAndRequiresExplicitPrinterSelection()
+    {
+        Environment.SetEnvironmentVariable("PRINTERWLAN_DATA_DIR", _directory);
+        var paths = new AppPaths();
+        var database = new AppDatabase(paths);
+        await database.InitializeAsync();
+        await database.SetSettingAsync("site_name", "Existing Printer Site");
+
+        await new AppDatabase(paths).InitializeAsync();
+
+        Assert.Equal("Existing Printer Site", await database.GetSettingAsync("site_name", "missing"));
+        Assert.Equal(string.Empty, await database.GetSettingAsync(PrinterSelectionService.SelectedPrinterIdKey, string.Empty));
+    }
+
+    [Fact]
+    public async Task AdminSelectionPersistsAndSwitchOnlyChangesNewSubmissions()
+    {
+        Environment.SetEnvironmentVariable("PRINTERWLAN_DATA_DIR", _directory);
+        var paths = new AppPaths();
+        var database = new AppDatabase(paths);
+        await database.InitializeAsync();
+        var firstService = new PrinterSelectionService(database, new FakePrinterService());
+
+        var unconfigured = await Assert.ThrowsAsync<PrintValidationException>(() => firstService.GetSelectedAsync());
+        Assert.Equal("当前暂未配置打印机，请联系管理员。", unconfigured.Message);
+
+        await firstService.SelectAsync(FakePrinterService.Capability.Id);
+        var queuedForA = await firstService.BindAsync(NewSubmission());
+        var restartedService = new PrinterSelectionService(new AppDatabase(paths), new FakePrinterService());
+        Assert.Equal(FakePrinterService.Capability.Id, (await restartedService.GetStateAsync()).SelectedPrinterId);
+
+        await restartedService.SelectAsync(FakePrinterService.SecondaryCapability.Id);
+        var queuedForB = await restartedService.BindAsync(NewSubmission() with { ColorMode = "monochrome" });
+
+        Assert.Equal(FakePrinterService.Capability.Id, queuedForA.PrinterId);
+        Assert.Equal(FakePrinterService.Capability.Name, queuedForA.PrinterName);
+        Assert.Equal(FakePrinterService.SecondaryCapability.Id, queuedForB.PrinterId);
+        Assert.NotEqual(queuedForA.PrinterId, queuedForB.PrinterId);
+    }
+
+    private static PrintSubmissionRequest NewSubmission() => new()
+    {
+        DocumentId = "document",
+        PaperSize = "A4",
+        ColorMode = "color"
+    };
 
     public void Dispose()
     {

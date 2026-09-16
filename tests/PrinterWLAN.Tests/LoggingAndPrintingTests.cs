@@ -34,7 +34,7 @@ public sealed class LoggingAndPrintingTests
     [Fact]
     public void FitScaleCentersInsideBounds()
     {
-        var request = new PrintRequest { DocumentId = "d", PrinterName = "p", PaperSize = "A4", ScaleMode = "fit", Center = true };
+        var request = new PrintRequest { DocumentId = "d", PrinterId = "p", PrinterName = "p", PaperSize = "A4", ScaleMode = "fit", Center = true };
         var target = WindowsPrinterService.CalculateTarget(new Rectangle(10, 20, 800, 1000), 600, 1200, request);
         Assert.True(target.Left >= 10 && target.Top >= 20 && target.Right <= 810 && target.Bottom <= 1020);
     }
@@ -43,7 +43,7 @@ public sealed class LoggingAndPrintingTests
     public async Task FakePrinterRejectsUnknownCapability()
     {
         var fake = new FakePrinterService();
-        var request = new PrintRequest { DocumentId = "d", PrinterName = "missing", PaperSize = "A4" };
+        var request = new PrintRequest { DocumentId = "d", PrinterId = "missing", PrinterName = "missing", PaperSize = "A4" };
         await Assert.ThrowsAsync<PrintValidationException>(() => fake.ValidateAsync(request));
     }
 }

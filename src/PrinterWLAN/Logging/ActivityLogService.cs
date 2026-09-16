@@ -192,7 +192,7 @@ public sealed class ActivityLogService(AppPaths paths, AppDatabase appDatabase, 
                 slices = slices.Select(s => s.Name),
                 recordCount = count,
                 exportedAt = DateTimeOffset.UtcNow,
-                version = "1.0.0"
+                version = "1.1.0"
             };
             await File.WriteAllTextAsync(Path.Combine(exportDirectory, "manifest.json"), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }), cancellationToken);
             var filename = slices.Length == 1 ? $"PrinterWLAN_Logs_{slices[0].Name}.zip" : $"PrinterWLAN_Logs_{slices[0].Start:yyyy-MM-dd}_to_{slices[^1].End:yyyy-MM-dd}.zip";

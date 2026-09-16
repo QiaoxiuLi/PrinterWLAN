@@ -49,7 +49,7 @@ public static class CliRunner
             }
             catch (HttpRequestException) { }
             catch (TaskCanceledException) { }
-            Console.WriteLine("PrinterWLAN v1.0.0");
+            Console.WriteLine("PrinterWLAN v1.1.0");
             Console.WriteLine($"服务状态：{serviceState}");
             Console.WriteLine($"网站状态：{(healthy ? "正常" : "无法访问，请查看 Diagnostics 日志确认端口是否被占用")}");
             Console.WriteLine($"HTTP 端口：{port}");
