@@ -71,6 +71,12 @@ try
     app.UseExceptionHandler(error => error.Run(async context =>
     {
         var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+        if (exception is BadHttpRequestException badRequest)
+        {
+            context.Response.StatusCode = badRequest.StatusCode;
+            await context.Response.WriteAsJsonAsync(new { message = "请求格式不正确。" });
+            return;
+        }
         context.RequestServices.GetRequiredService<ILogger<Program>>()
             .LogError(exception, "Unhandled request error for {Method} {Path}", context.Request.Method, context.Request.Path);
         context.Response.StatusCode = 500;
