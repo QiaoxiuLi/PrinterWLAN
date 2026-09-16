@@ -116,12 +116,20 @@ jobs:
             Start-Process $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait
           }
           if (Get-Service PrinterWLAN -ErrorAction SilentlyContinue) { throw 'Service still exists after Windows 11 uninstall.' }
+      - name: Collect Windows 11 diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $source = 'C:\ProgramData\PrinterWLAN\Diagnostics'
+          $destination = 'artifacts/windows-11-smoke/Diagnostics'
+          if (Test-Path $source) {
+            New-Item -ItemType Directory -Force -Path $destination | Out-Null
+            Copy-Item (Join-Path $source '*') $destination -Recurse -Force
+          }
       - name: Upload Windows 11 evidence
         if: always()
         uses: actions/upload-artifact@v5
         with:
           name: PrinterWLAN-v1.2.0-windows-11-desktop-evidence
-          path: |
-            artifacts/windows-11-smoke/
-            C:/ProgramData/PrinterWLAN/Diagnostics/
+          path: artifacts/windows-11-smoke/
           if-no-files-found: warn

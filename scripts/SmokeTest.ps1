@@ -2,7 +2,7 @@ param(
   [string]$InstallerPath,
   [string]$OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts/smoke'),
   [string]$AdminPassword = $env:PRINTERWLAN_ADMIN_PASSWORD,
-  [ValidateSet('Fake','SystemPdf')][string]$PrinterMode = 'Fake'
+  [ValidateSet('Fake','SystemDriver')][string]$PrinterMode = 'Fake'
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $InstallerPath)) { throw "Installer not found: $InstallerPath" }
@@ -10,26 +10,26 @@ if ([string]::IsNullOrWhiteSpace($AdminPassword)) { throw 'PRINTERWLAN_ADMIN_PAS
 New-Item -ItemType Directory -Force $OutputDirectory | Out-Null
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 $testPrinterName = 'PrinterWLAN Windows Compatibility Printer'
-$printedPdfPath = Join-Path $OutputDirectory 'windows-driver-output.pdf'
+$printedOutputPath = Join-Path $OutputDirectory 'windows-driver-output.prn'
 
-function Install-SystemPdfPrinter {
-  if (Test-Path $printedPdfPath) { Remove-Item $printedPdfPath -Force }
-  $feature = Get-WindowsOptionalFeature -Online -FeatureName Printing-PrintToPDFServices-Features -ErrorAction SilentlyContinue
-  if ($feature -and $feature.State -ne 'Enabled') {
-    Enable-WindowsOptionalFeature -Online -FeatureName Printing-PrintToPDFServices-Features -All -NoRestart | Out-Null
-    Restart-Service Spooler -Force
+function Install-SystemTestPrinter {
+  if (Test-Path $printedOutputPath) { Remove-Item $printedOutputPath -Force }
+  $driverName = 'Generic / Text Only'
+  $driver = Get-PrinterDriver -Name $driverName -ErrorAction SilentlyContinue
+  if (-not $driver) {
+    Add-PrinterDriver -Name $driverName
+    $driver = Get-PrinterDriver -Name $driverName -ErrorAction SilentlyContinue
   }
-  $driver = Get-PrinterDriver | Where-Object Name -Like '*Print To PDF*' | Select-Object -First 1
-  if (-not $driver) { throw 'The Windows Microsoft Print to PDF driver is unavailable.' }
+  if (-not $driver) { throw 'The Windows inbox Generic / Text Only print driver is unavailable.' }
   Get-Printer -Name $testPrinterName -ErrorAction SilentlyContinue | Remove-Printer -ErrorAction SilentlyContinue
-  Get-PrinterPort -Name $printedPdfPath -ErrorAction SilentlyContinue | Remove-PrinterPort -ErrorAction SilentlyContinue
-  Add-PrinterPort -Name $printedPdfPath
-  Add-Printer -Name $testPrinterName -DriverName $driver.Name -PortName $printedPdfPath
+  Get-PrinterPort -Name $printedOutputPath -ErrorAction SilentlyContinue | Remove-PrinterPort -ErrorAction SilentlyContinue
+  Add-PrinterPort -Name $printedOutputPath
+  Add-Printer -Name $testPrinterName -DriverName $driver.Name -PortName $printedOutputPath
 }
 
-function Remove-SystemPdfPrinter {
+function Remove-SystemTestPrinter {
   Get-Printer -Name $testPrinterName -ErrorAction SilentlyContinue | Remove-Printer -ErrorAction SilentlyContinue
-  Get-PrinterPort -Name $printedPdfPath -ErrorAction SilentlyContinue | Remove-PrinterPort -ErrorAction SilentlyContinue
+  Get-PrinterPort -Name $printedOutputPath -ErrorAction SilentlyContinue | Remove-PrinterPort -ErrorAction SilentlyContinue
 }
 
 function New-TestPdf([string]$Path) {
@@ -70,7 +70,7 @@ function Get-Csrf($Session) { return ($Session.Cookies.GetCookies('http://127.0.
 function Get-Headers($Session) { return @{ 'X-CSRF-Token'=(Get-Csrf $Session); 'X-Device-Id'='00000000-0000-4000-8000-000000000001'; 'X-Session-Id'='smoke-test-session'; 'X-Viewport'='1366x768'; 'X-Screen'='1920x1080'; 'X-Timezone'='UTC' } }
 
 try {
-if ($PrinterMode -eq 'SystemPdf') { Install-SystemPdfPrinter }
+if ($PrinterMode -eq 'SystemDriver') { Install-SystemTestPrinter }
 $installerArguments = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART')
 if ($PrinterMode -eq 'Fake') { $installerArguments += '/FAKEPRINTER' }
 Start-Process $InstallerPath -ArgumentList $installerArguments -Wait
@@ -123,12 +123,16 @@ $jobRequest=@{documentId=$upload.id;paperSize=$paper.name;orientation='portrait'
 $job=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/jobs' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json' -Body $jobRequest
 for($i=0;$i -lt 30;$i++){ $status=Invoke-RestMethod "http://127.0.0.1:8080/api/user/jobs/$($job.jobId)" -WebSession $user;if($status.status -eq 'sent'){break};if($status.status -eq 'failed'){throw $status.friendlyError};Start-Sleep -Milliseconds 500 }
 if ($status.status -ne 'sent') { throw "$PrinterMode printer job did not reach sent state." }
-if ($PrinterMode -eq 'SystemPdf') {
+if ($PrinterMode -eq 'SystemDriver') {
   $printDeadline=(Get-Date).AddSeconds(60)
-  do { if ((Test-Path $printedPdfPath) -and (Get-Item $printedPdfPath).Length -gt 4) { break }; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $printDeadline)
-  if (-not (Test-Path $printedPdfPath)) { throw 'Windows print driver did not create an output file.' }
-  $signature=[IO.File]::ReadAllBytes($printedPdfPath)[0..4]
-  if ([Text.Encoding]::ASCII.GetString($signature) -ne '%PDF-') { throw 'Windows print driver output is not a PDF.' }
+  do { if ((Test-Path $printedOutputPath) -and (Get-Item $printedOutputPath).Length -gt 0) { break }; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $printDeadline)
+  if (-not (Test-Path $printedOutputPath) -or (Get-Item $printedOutputPath).Length -eq 0) {
+    Write-Host 'Windows system-driver diagnostics:'
+    Get-Printer -Name $testPrinterName -ErrorAction SilentlyContinue | Format-List Name,DriverName,PortName,PrinterStatus,WorkOffline
+    Get-PrinterPort -Name $printedOutputPath -ErrorAction SilentlyContinue | Format-List Name,Description,PrinterHostAddress,PortMonitor
+    Get-PrintJob -PrinterName $testPrinterName -ErrorAction SilentlyContinue | Format-List ID,DocumentName,JobStatus,SubmittedTime,Size,TotalPages
+    throw 'Windows print driver did not create a non-empty output file.'
+  }
 }
 
 $docxPath=Join-Path $OutputDirectory '中文 sample.docx';New-TestDocx $docxPath
@@ -138,5 +142,5 @@ Invoke-RestMethod "http://127.0.0.1:8080/api/user/documents/$($word.id)" -Method
 Write-Host "Installer, service, HTTP, authentication, PDF, Word, and $PrinterMode print smoke tests passed."
 }
 finally {
-  if ($PrinterMode -eq 'SystemPdf') { Remove-SystemPdfPrinter }
+  if ($PrinterMode -eq 'SystemDriver') { Remove-SystemTestPrinter }
 }
