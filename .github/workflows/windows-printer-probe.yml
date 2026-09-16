@@ -1,0 +1,21 @@
+name: Windows 11 printer inventory probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: windows-11-arm
+    steps:
+      - name: List installed printers, drivers, and ports
+        shell: pwsh
+        run: |
+          Write-Host '=== Printers ==='
+          Get-Printer | Sort-Object Name | Format-List Name,DriverName,PortName,Type,PrinterStatus
+          Write-Host '=== Drivers ==='
+          Get-PrinterDriver | Sort-Object Name | Format-List Name,Manufacturer,MajorVersion,InfPath
+          Write-Host '=== Ports ==='
+          Get-PrinterPort | Sort-Object Name | Format-List Name,Description,PortMonitor
