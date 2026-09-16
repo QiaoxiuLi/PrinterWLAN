@@ -18,11 +18,17 @@ jobs:
       - name: Require Windows x64 client and physical-printer acceptance
         shell: pwsh
         env:
-          VALIDATED_COMMIT: ${{ vars.PRINTERWLAN_WINDOWS_CLIENT_VALIDATED_COMMIT }}
+          WINDOWS10_VALIDATED_COMMIT: ${{ vars.PRINTERWLAN_WINDOWS10_VALIDATED_COMMIT }}
+          WINDOWS11_VALIDATED_COMMIT: ${{ vars.PRINTERWLAN_WINDOWS11_VALIDATED_COMMIT }}
+          PHYSICAL_PRINTER_VALIDATED_COMMIT: ${{ vars.PRINTERWLAN_PHYSICAL_PRINTER_VALIDATED_COMMIT }}
         run: |
           $expected = '${{ github.sha }}'
-          if ($env:VALIDATED_COMMIT -ne $expected) {
-            throw "Release is blocked. Complete Windows 10/11 x64 and physical-printer acceptance, then set PRINTERWLAN_WINDOWS_CLIENT_VALIDATED_COMMIT to $expected."
+          $missing = @()
+          if ($env:WINDOWS10_VALIDATED_COMMIT -ne $expected) { $missing += 'Windows 10 x64' }
+          if ($env:WINDOWS11_VALIDATED_COMMIT -ne $expected) { $missing += 'Windows 11 x64' }
+          if ($env:PHYSICAL_PRINTER_VALIDATED_COMMIT -ne $expected) { $missing += 'physical printer' }
+          if ($missing.Count -gt 0) {
+            throw "Release is blocked for commit $expected. Missing matching acceptance: $($missing -join ', ')."
           }
       - uses: actions/setup-dotnet@v5
         with: { dotnet-version: 10.0.401 }

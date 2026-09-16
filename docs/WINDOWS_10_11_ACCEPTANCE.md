@@ -46,9 +46,10 @@ $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator
 
 只有同时满足以下条件，才可以为该 commit 创建 v1.2.0 tag：
 
-1. 在 Windows 10 或 Windows 11 x64 真机执行上述脚本并通过；
-2. 在至少一台真实打印机上完成 PDF、DOCX 与可用打印参数检查；
-3. 验收的源代码 commit 与准备打 tag 的 commit 完全一致；
-4. 将 GitHub Actions 仓库变量 `PRINTERWLAN_WINDOWS_CLIENT_VALIDATED_COMMIT` 设为该完整 commit SHA。
+1. 在 Windows 10 x64 真机执行上述脚本并通过；
+2. 在 Windows 11 x64 真机执行上述脚本并通过；
+3. 在至少一台真实打印机上完成 PDF、DOCX 与可用打印参数检查；
+4. 三项验收的源代码 commit 与准备打 tag 的 commit 完全一致；
+5. 将 GitHub Actions 仓库变量 `PRINTERWLAN_WINDOWS10_VALIDATED_COMMIT`、`PRINTERWLAN_WINDOWS11_VALIDATED_COMMIT` 和 `PRINTERWLAN_PHYSICAL_PRINTER_VALIDATED_COMMIT` 都设为该完整 commit SHA。
 
-Release workflow 会核对该变量；缺失或与 tag commit 不一致时会主动失败，不会创建 GitHub Release。
+Release workflow 会核对这些变量；任意一项缺失或与 tag commit 不一致时会主动失败，不会创建 GitHub Release。
