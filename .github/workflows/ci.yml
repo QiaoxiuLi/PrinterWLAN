@@ -77,11 +77,51 @@ jobs:
       - uses: actions/upload-artifact@v5
         if: always()
         with:
-          name: PrinterWLAN-v1.1.0-windows-x64
+          name: PrinterWLAN-v1.2.0-windows-x64
           path: |
             artifacts/installer/PrinterWLAN-Setup-x64.exe
             artifacts/installer/PrinterWLAN-Setup-x64.exe.sha256
             **/TestResults/*.trx
             tests/PrinterWLAN.UiTests/playwright-report/
             artifacts/diagnostics/
+          if-no-files-found: warn
+
+  windows-11-desktop-compatibility:
+    name: Windows 11 Desktop / real print driver
+    needs: build-test-installer
+    runs-on: windows-11-arm
+    timeout-minutes: 45
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: PrinterWLAN-v1.2.0-windows-x64
+          path: downloaded-artifact
+      - name: Full desktop installation and Windows print-driver test
+        shell: pwsh
+        run: |
+          $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          $installer=(Get-ChildItem downloaded-artifact -Filter PrinterWLAN-Setup-x64.exe -Recurse | Select-Object -First 1).FullName
+          if (-not $installer) { throw 'Downloaded installer was not found.' }
+          ./scripts/WindowsClientAcceptance.ps1 -InstallerPath $installer -AdminPassword $password -OutputDirectory artifacts/windows-11-smoke
+      - name: Uninstall desktop test instance
+        if: always()
+        shell: pwsh
+        run: |
+          $uninstaller="$env:ProgramFiles\PrinterWLAN\unins000.exe"
+          if (Test-Path $uninstaller) {
+            Start-Process $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait
+          }
+          if (Get-Service PrinterWLAN -ErrorAction SilentlyContinue) { throw 'Service still exists after Windows 11 uninstall.' }
+      - name: Upload Windows 11 evidence
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: PrinterWLAN-v1.2.0-windows-11-desktop-evidence
+          path: |
+            artifacts/windows-11-smoke/
+            C:/ProgramData/PrinterWLAN/Diagnostics/
           if-no-files-found: warn

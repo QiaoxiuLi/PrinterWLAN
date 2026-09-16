@@ -1,14 +1,25 @@
 # PrinterWLAN
 
-PrinterWLAN 是面向受信任局域网的 Windows 网页打印服务器。它作为 Windows Service 在 **Windows Server 2025 x64** 上运行；手机、平板和电脑只需打开浏览器、登录、上传 PDF 或 Word 文件，即可调用服务器中已经安装好的 Windows 打印机及其驱动完成打印。
+PrinterWLAN 是面向受信任局域网的 Windows 网页打印服务器。它作为 Windows Service 在 **Windows 10、Windows 11 或 Windows Server x64** 上运行；手机、平板和电脑只需打开浏览器、登录、上传 PDF 或 Word 文件，即可调用主机中已经安装好的 Windows 打印机及其驱动完成打印。
 
-正式安装包是自包含的：包含 .NET 10 运行时、PDF.js、PDFium/SkiaSharp 和独立的 LibreOffice Windows x64 运行时。目标服务器不需要预装 .NET、Node.js、Python、Java、Microsoft Office 或 LibreOffice，安装完成后的运行也不依赖互联网、CDN、云服务或外部 API。
+正式安装包是自包含的：包含 .NET 10 运行时、PDF.js、PDFium/SkiaSharp、独立的 LibreOffice Windows x64 运行时，以及原生组件所需的 Microsoft Visual C++ v14 运行库。目标电脑不需要自行安装 .NET、Visual C++ Runtime、Node.js、Python、Java、Microsoft Office 或 LibreOffice；安装完成后的运行也不依赖互联网、CDN、云服务或外部 API。
+
+## 支持的 Windows
+
+| 系统 | 支持范围 |
+|---|---|
+| Windows 10 x64 | 1809 / build 17763 或更高；普通 Home/Pro 建议使用最终版 22H2 / build 19045 |
+| Windows 11 x64 | 正式支持 |
+| Windows 11 ARM64 | 通过系统的 x64 兼容模式运行 |
+| Windows Server x64 | 2019、2022、2025 |
+
+Windows 10 Home/Pro 已结束微软常规安全支持，PrinterWLAN 仍提供安装与兼容处理，但用于长期联网环境时建议升级到仍受支持的 Windows 11。打印机厂商驱动不属于 PrinterWLAN，必须先在 Windows 中安装；USB、本地 TCP/IP 或共享打印机应安装为这台电脑上的系统打印队列，使 `LocalSystem` 服务可以访问。
 
 ## 安装与首次启动
 
 1. 从 [GitHub Releases](https://github.com/QiaoxiuLi/PrinterWLAN/releases) 下载 `PrinterWLAN-Setup-x64.exe` 和对应的 `.sha256` 文件。
-2. 在 Windows Server 2025 x64 上以管理员身份运行安装程序。
-3. 安装程序会创建 `PrinterWLAN` 自动启动服务、TCP 8080 入站防火墙规则、系统 PATH、开始菜单入口，以及管理员登录桌面时打开的管理 CMD 任务。
+2. 在受支持的 Windows 10、Windows 11 或 Windows Server 上以管理员身份运行安装程序。
+3. 安装程序会离线配置全部随包运行组件，创建依赖 Windows Print Spooler 的 `PrinterWLAN` 延迟自动启动服务、TCP 8080 入站防火墙规则、系统 PATH、开始菜单入口，以及管理员登录桌面时打开的管理 CMD 任务。
 4. 在自动打开的管理窗口中设置管理员密码：
 
    ```cmd
@@ -16,7 +27,7 @@ PrinterWLAN 是面向受信任局域网的 Windows 网页打印服务器。它�
    ```
 
 5. 在同一网络的设备打开 `http://服务器IP:8080`，通过右下角“管理员登录”进入后台，在“打印机设置”中选择所有用户统一使用的打印机。
-6. 运行 `printerwlan status` 可查看服务、端口、局域网地址和 Windows 已安装打印机数量。
+6. 运行 `printerwlan doctor` 检查 Windows 版本、内置原生组件、数据目录、Print Spooler 和打印机；运行 `printerwlan status` 查看服务、端口和局域网地址。
 
 Windows 中必须预先安装目标打印机及其 x64 驱动，并确保 `LocalSystem` 服务上下文可以访问该打印机。PrinterWLAN 不包含厂商打印机驱动。
 
@@ -86,10 +97,11 @@ PrinterWLAN 有意只提供 HTTP，适合隔离、可信的 LAN/VPN。HTTP 不�
 
 ```cmd
 printerwlan status
+printerwlan doctor
 printerwlan pwd "新的管理员密码"
 ```
 
-`status` 只在服务器本机显示服务状态、HTTP 端口、局域网地址、打印机数量和版本。`pwd` 直接更新业务数据库中的管理员 password hash，无需重启服务，密码本身不会写入日志。
+`doctor` 在本机逐项检查操作系统、PDF.js、LibreOffice、SQLite、PDFium、SkiaSharp、数据目录、Print Spooler 和打印机可见性；缺少打印机是可后续处理的提示，缺少运行组件或 Spooler 则返回失败。`status` 显示服务状态、HTTP 端口、局域网地址、打印机数量和版本。`pwd` 直接更新业务数据库中的管理员 password hash，无需重启服务，密码本身不会写入日志。
 
 ## 卸载
 
@@ -110,11 +122,13 @@ dotnet publish src/PrinterWLAN/PrinterWLAN.csproj -c Release -r win-x64 --self-c
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\PrinterWLAN.iss
 ```
 
-`Prepare-ThirdParty.ps1` 从 [`third-party/manifests/dependencies.json`](third-party/manifests/dependencies.json) 读取固定 URL 和 SHA-256，校验后准备 PDF.js 与 LibreOffice。哈希不匹配会立即终止构建。大型第三方二进制、`bin`、`obj`、运行数据库、日志和安装产物均不提交到 Git。
+`Prepare-ThirdParty.ps1` 从 [`third-party/manifests/dependencies.json`](third-party/manifests/dependencies.json) 读取固定 URL 和 SHA-256，校验后准备 PDF.js、LibreOffice 和 Microsoft Visual C++ v14 运行库。哈希不匹配会立即终止构建。大型第三方二进制、`bin`、`obj`、运行数据库、日志和安装产物均不提交到 Git。
 
 ## GitHub Actions
 
-`Windows Server 2025 CI` 明确运行在 `windows-2025`，执行 locked restore、Release build、单元/集成测试、`win-x64` self-contained publish、依赖下载与 SHA-256 校验、Inno Setup 编译、静默安装、Windows Service/HTTP/CLI/登录/PDF/Word/Fake printer smoke test、Playwright 多 viewport 测试和静默卸载。
+CI 首先在 `windows-2025` 执行 locked restore、Release build、单元/集成测试、`win-x64` self-contained publish、依赖下载与 SHA-256 校验、Inno Setup 编译、静默安装、Windows Service/HTTP/CLI/登录/PDF/Word/Fake printer smoke test、Playwright 多 viewport 测试和静默卸载。随后同一个安装包必须在 GitHub 的 Windows 11 Desktop runner 上通过安装、`doctor`、LibreOffice、PDFium、SQLite、服务重启配置，并通过系统 `Microsoft Print to PDF` 驱动产生真实打印输出文件，Release job 才能继续发布。
+
+仓库还提供 [`scripts/WindowsClientAcceptance.ps1`](scripts/WindowsClientAcceptance.ps1)。在 Windows 10 x64 真机上运行它，可以执行与 Windows 11 CI 相同的安装、登录、PDF/Word、管理员统一打印机、Windows 打印驱动、服务和卸载前检查，并生成 `compatibility-evidence.json` 验收证据。CI 的 Windows 11 结果不能冒充 Windows 10 真机结果。
 
 推送 `v*` tag 会运行相同完整验证，然后使用 GitHub 官方 `gh` CLI 创建非 Draft、非 Prerelease Release，并上传安装包与 SHA-256。
 

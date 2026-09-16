@@ -20,12 +20,12 @@ function Wait-ForHealth {
 function Get-Csrf($Session) { return ($Session.Cookies.GetCookies('http://127.0.0.1:8080') | Where-Object Name -eq 'PrinterWLAN-CSRF').Value }
 function Get-Headers($Session) { return @{ 'X-CSRF-Token'=(Get-Csrf $Session); 'X-Device-Id'='00000000-0000-4000-8000-000000000002'; 'X-Session-Id'='upgrade-test-session' } }
 
-$oldInstaller=Join-Path $OutputDirectory 'PrinterWLAN-v1.0.0-Setup-x64.exe'
-Invoke-WebRequest 'https://github.com/QiaoxiuLi/PrinterWLAN/releases/download/v1.0.0/PrinterWLAN-Setup-x64.exe' -OutFile $oldInstaller
+$oldInstaller=Join-Path $OutputDirectory 'PrinterWLAN-v1.1.0-Setup-x64.exe'
+Invoke-WebRequest 'https://github.com/QiaoxiuLi/PrinterWLAN/releases/download/v1.1.0/PrinterWLAN-Setup-x64.exe' -OutFile $oldInstaller
 Start-Process $oldInstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/FAKEPRINTER') -Wait
 Wait-ForHealth
 & "$env:ProgramFiles\PrinterWLAN\PrinterWLAN.exe" pwd $AdminPassword
-if ($LASTEXITCODE -ne 0) { throw 'v1.0.0 administrator password setup failed.' }
+if ($LASTEXITCODE -ne 0) { throw 'v1.1.0 administrator password setup failed.' }
 
 $before=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $before | Out-Null
@@ -34,15 +34,19 @@ Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/settings' -Method Put -WebSes
 $csvPath=Join-Path $OutputDirectory 'upgrade-users.csv'
 [IO.File]::WriteAllText($csvPath,"用户名`r`n升级保留用户`r`n",[Text.UTF8Encoding]::new($true))
 Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/users/import' -Method Post -WebSession $before -Headers (Get-Headers $before) -Form @{file=Get-Item $csvPath} | Out-Null
+$beforePrinters=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $before
+$selectedPrinter=$beforePrinters.printers | Where-Object name -eq 'PrinterWLAN Test Printer A' | Select-Object -First 1
+if (-not $selectedPrinter) { throw 'v1.1.0 fake printer was unavailable.' }
+Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printer' -Method Put -WebSession $before -Headers (Get-Headers $before) -ContentType 'application/json' -Body (@{printerId=$selectedPrinter.id}|ConvertTo-Json) | Out-Null
 
 Start-Process $CurrentInstallerPath -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/FAKEPRINTER') -Wait
 Wait-ForHealth
 $after=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 $bootstrap=Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $after
-if ($bootstrap.siteName -ne 'PrinterWLAN Upgrade Preserved' -or $bootstrap.version -ne '1.1.0') { throw 'Upgrade did not preserve the site name or install v1.1.0.' }
+if ($bootstrap.siteName -ne 'PrinterWLAN Upgrade Preserved' -or $bootstrap.version -ne '1.2.0') { throw 'Upgrade did not preserve the site name or install v1.2.0.' }
 Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $after -Headers (Get-Headers $after) -ContentType 'application/json' -Body (@{password=$AdminPassword}|ConvertTo-Json) | Out-Null
 $users=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/users?query=%E5%8D%87%E7%BA%A7%E4%BF%9D%E7%95%99%E7%94%A8%E6%88%B7&page=1&pageSize=50' -WebSession $after
 if ($users.total -ne 1) { throw 'Upgrade did not preserve the existing user.' }
 $printers=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $after
-if ($printers.status -ne 'unconfigured' -or $printers.selectedPrinterId) { throw 'Upgrade must require an explicit administrator printer selection.' }
-Write-Host 'v1.0.0 to v1.1.0 upgrade preserved data and left printer selection unconfigured.'
+if ($printers.selectedPrinterId -ne $selectedPrinter.id -or $printers.selectedPrinterName -ne $selectedPrinter.name) { throw 'Upgrade did not preserve the administrator printer selection.' }
+Write-Host 'v1.1.0 to v1.2.0 upgrade preserved the site, users, credentials, and administrator printer selection.'

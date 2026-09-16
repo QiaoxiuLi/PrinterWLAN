@@ -74,4 +74,11 @@ if (-not $SkipLibreOffice) {
   }
 }
 
+$vc = $manifest.downloads | Where-Object name -Like 'Microsoft Visual C++*'
+$vcDownload = Join-Path $downloads "VC_redist-$($vc.version)-x64.exe"
+Get-VerifiedFile $vc $vcDownload
+$prerequisites = Join-Path $runtime 'Prerequisites'
+New-Item -ItemType Directory -Force $prerequisites | Out-Null
+Copy-Item $vcDownload (Join-Path $prerequisites 'VC_redist.x64.exe') -Force
+
 Write-Host 'Pinned third-party runtimes prepared and verified.'

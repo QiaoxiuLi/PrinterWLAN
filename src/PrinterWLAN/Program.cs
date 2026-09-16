@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Options;
+using PrinterWLAN;
 using PrinterWLAN.Authentication;
 using PrinterWLAN.Background;
 using PrinterWLAN.Documents;
@@ -91,7 +92,9 @@ try
     app.UseAuthorization();
     app.MapPrinterWlanApi();
     app.MapFallbackToFile("index.html");
-    Log.Information("PrinterWLAN 1.1.0 starting on HTTP port {Port}", configured.Port);
+    var platform = WindowsCompatibility.Current;
+    Log.Information("PrinterWLAN {Version} starting on {Platform} at HTTP port {Port}",
+        ProductInfo.Version, platform.PlatformName, configured.Port);
     await app.RunAsync();
     return 0;
 }

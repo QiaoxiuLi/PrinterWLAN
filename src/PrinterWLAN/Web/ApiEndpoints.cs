@@ -40,7 +40,7 @@ public static class ApiEndpoints
                 adminConfigured = await admin.IsConfiguredAsync(token),
                 userAuthenticated = userAuth.Succeeded,
                 adminAuthenticated = adminAuth.Succeeded,
-                version = "1.1.0"
+                version = ProductInfo.Version
             });
         });
 
@@ -199,7 +199,7 @@ public static class ApiEndpoints
             await context.SignOutAsync("AdminCookie");
             return Results.NoContent();
         });
-        group.MapGet("/settings", async (AppDatabase database, CancellationToken token) => Results.Ok(new { siteName = await database.GetSettingAsync("site_name", "PrinterWLAN", token), version = "1.1.0" }));
+        group.MapGet("/settings", async (AppDatabase database, CancellationToken token) => Results.Ok(new { siteName = await database.GetSettingAsync("site_name", "PrinterWLAN", token), version = ProductInfo.Version }));
         group.MapPut("/settings", async ([FromBody] SiteSettings request, AppDatabase database, CancellationToken token) =>
         {
             var name = request.SiteName?.Trim();

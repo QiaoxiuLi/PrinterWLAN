@@ -13,6 +13,7 @@ PrinterWLAN is MIT licensed and includes or redistributes the following third-pa
 | SkiaSharp | 4.150.1 | MIT | https://github.com/mono/SkiaSharp |
 | Mozilla PDF.js | 6.3.289 | Apache-2.0 | https://github.com/mozilla/pdf.js |
 | LibreOffice | 26.8.0 Windows x64 | MPL-2.0 / LGPL-3.0-or-later | https://www.libreoffice.org/ |
+| Microsoft Visual C++ Redistributable | 14.50.35719 x64/ARM64 | Microsoft Software License Terms | https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist |
 | Serilog.AspNetCore | 10.0.0 | Apache-2.0 | https://github.com/serilog/serilog-aspnetcore |
 | Serilog.Sinks.File | 7.0.0 | Apache-2.0 | https://github.com/serilog/serilog-sinks-file |
 

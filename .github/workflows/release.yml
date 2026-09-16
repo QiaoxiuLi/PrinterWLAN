@@ -5,7 +5,8 @@ on:
 permissions:
   contents: write
 jobs:
-  release:
+  build-release-candidate:
+    name: Build and verify release candidate
     runs-on: windows-2025
     timeout-minutes: 90
     env:
@@ -45,10 +46,57 @@ jobs:
           $file='artifacts/installer/PrinterWLAN-Setup-x64.exe'
           $hash=(Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  PrinterWLAN-Setup-x64.exe" | Set-Content "$file.sha256" -Encoding ascii
-      - name: Create GitHub Release
+      - uses: actions/upload-artifact@v5
+        with:
+          name: PrinterWLAN-v1.2.0-release-candidate
+          path: |
+            artifacts/installer/PrinterWLAN-Setup-x64.exe
+            artifacts/installer/PrinterWLAN-Setup-x64.exe.sha256
+          if-no-files-found: error
+
+  windows-11-desktop-compatibility:
+    name: Windows 11 Desktop / real print driver
+    needs: build-release-candidate
+    runs-on: windows-11-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: PrinterWLAN-v1.2.0-release-candidate
+          path: downloaded-artifact
+      - name: Full desktop installation and Windows print-driver test
         shell: pwsh
         run: |
-          gh release create '${{ github.ref_name }}' `
-            'artifacts/installer/PrinterWLAN-Setup-x64.exe' `
-            'artifacts/installer/PrinterWLAN-Setup-x64.exe.sha256' `
-            --verify-tag --title 'PrinterWLAN v1.1.0' --notes-file docs/RELEASE_NOTES_v1.1.0.md
+          $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          $installer=(Get-ChildItem downloaded-artifact -Filter PrinterWLAN-Setup-x64.exe -Recurse | Select-Object -First 1).FullName
+          if (-not $installer) { throw 'Downloaded installer was not found.' }
+          ./scripts/WindowsClientAcceptance.ps1 -InstallerPath $installer -AdminPassword $password -OutputDirectory artifacts/windows-11-smoke
+      - name: Uninstall desktop test instance
+        if: always()
+        shell: pwsh
+        run: |
+          $uninstaller="$env:ProgramFiles\PrinterWLAN\unins000.exe"
+          if (Test-Path $uninstaller) {
+            Start-Process $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait
+          }
+          if (Get-Service PrinterWLAN -ErrorAction SilentlyContinue) { throw 'Service still exists after Windows 11 uninstall.' }
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-release-candidate, windows-11-desktop-compatibility]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: PrinterWLAN-v1.2.0-release-candidate
+          path: artifacts/installer
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create '${{ github.ref_name }}' \
+            'artifacts/installer/PrinterWLAN-Setup-x64.exe' \
+            'artifacts/installer/PrinterWLAN-Setup-x64.exe.sha256' \
+            --verify-tag --title 'PrinterWLAN ${{ github.ref_name }}' --notes-file docs/RELEASE_NOTES_v1.2.0.md
