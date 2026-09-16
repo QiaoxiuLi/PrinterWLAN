@@ -41,3 +41,14 @@ $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator
 - 上传、用户导出等烟雾测试中间证据。
 
 验收脚本不会假装验证物理纸张。使用具体品牌打印机时，还应在管理员后台选择该打印机，以 PDF 和 DOCX 各打印一份，确认纸张、方向、单双面、颜色、纸盒和分辨率与驱动能力一致。
+
+## Release 门槛
+
+只有同时满足以下条件，才可以为该 commit 创建 v1.2.0 tag：
+
+1. 在 Windows 10 或 Windows 11 x64 真机执行上述脚本并通过；
+2. 在至少一台真实打印机上完成 PDF、DOCX 与可用打印参数检查；
+3. 验收的源代码 commit 与准备打 tag 的 commit 完全一致；
+4. 将 GitHub Actions 仓库变量 `PRINTERWLAN_WINDOWS_CLIENT_VALIDATED_COMMIT` 设为该完整 commit SHA。
+
+Release workflow 会核对该变量；缺失或与 tag commit 不一致时会主动失败，不会创建 GitHub Release。

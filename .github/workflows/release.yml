@@ -15,6 +15,15 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v5
+      - name: Require Windows x64 client and physical-printer acceptance
+        shell: pwsh
+        env:
+          VALIDATED_COMMIT: ${{ vars.PRINTERWLAN_WINDOWS_CLIENT_VALIDATED_COMMIT }}
+        run: |
+          $expected = '${{ github.sha }}'
+          if ($env:VALIDATED_COMMIT -ne $expected) {
+            throw "Release is blocked. Complete Windows 10/11 x64 and physical-printer acceptance, then set PRINTERWLAN_WINDOWS_CLIENT_VALIDATED_COMMIT to $expected."
+          }
       - uses: actions/setup-dotnet@v5
         with: { dotnet-version: 10.0.401 }
       - name: Prepare, test, and publish

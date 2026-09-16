@@ -27,6 +27,7 @@ printerwlan doctor
 - Windows 11 ARM Desktop：x64 发布候选完成安装和全部内置组件检查；PrinterWLAN 向真实 Spooler 提交非空单页任务，并由原生 ARM64 控制进程通过同一 `Microsoft Print to PDF` 驱动生成有效 PDF。该拆分专用于 GitHub ARM64 托管机的跨架构驱动限制。
 - Windows 10：提供 `scripts/WindowsClientAcceptance.ps1` 真机验收脚本，执行与 Windows 11 相同的安装、文档和系统打印驱动链路并生成 JSON 证据。
 - v1.1.0 → v1.2.0 升级保留网站名称、用户、凭据、日志、数据库和管理员已选打印机。
+- Release 增加人工验收 commit 门槛：Windows 10/11 x64 与实体打印机未针对同一 commit 验收时，工作流拒绝发布。
 
 ## 仍需注意
 
