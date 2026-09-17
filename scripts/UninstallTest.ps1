@@ -10,7 +10,10 @@ function Assert-IntegrationRemoved([bool]$ExpectData) {
   if (Get-Service PrinterWLAN -ErrorAction SilentlyContinue) { throw 'Service still exists after uninstall.' }
   if (Get-NetFirewallRule -DisplayName 'PrinterWLAN HTTP 8080' -ErrorAction SilentlyContinue) { throw 'Firewall rule still exists after uninstall.' }
   if (Get-ScheduledTask -TaskName 'PrinterWLAN Management Console' -ErrorAction SilentlyContinue) { throw 'ONLOGON management task still exists after uninstall.' }
-  if (Test-Path $appDirectory) { throw 'Application directory still exists after uninstall.' }
+  if (Test-Path $appDirectory) {
+    $remaining = @(Get-ChildItem $appDirectory -Force -Recurse -ErrorAction SilentlyContinue | Select-Object -First 20 -ExpandProperty FullName)
+    throw "Application directory still exists after uninstall. Remaining entries: $($remaining -join '; ')"
+  }
   $machinePath=[Environment]::GetEnvironmentVariable('Path','Machine')
   if (($machinePath -split ';') -contains $appDirectory) { throw 'PrinterWLAN install directory remains in machine PATH after uninstall.' }
   if ((Test-Path $dataDirectory) -ne $ExpectData) { throw "ProgramData preservation result was incorrect. Expected data=$ExpectData." }

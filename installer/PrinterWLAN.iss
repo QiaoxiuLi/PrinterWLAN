@@ -41,6 +41,7 @@ Source: "..\artifacts\publish\*"; DestDir: "{app}"; Flags: ignoreversion recurse
 Source: "..\third-party\runtime\LibreOffice\*"; DestDir: "{app}\third-party\LibreOffice"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\third-party\runtime\Prerequisites\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "printerwlan-console.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Stop-PrinterWLANForUninstall.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Register-ManagementConsoleTask.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
@@ -66,10 +67,9 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "doctor"; StatusMsg: "正在检�
 Filename: "{cmd}"; Parameters: "/d /k ""{app}\printerwlan-console.cmd"""; WorkingDir: "{app}"; Description: "打开 PrinterWLAN 管理控制台"; Flags: postinstall nowait skipifsilent
 
 [UninstallRun]
-Filename: "{sys}\sc.exe"; Parameters: "stop PrinterWLAN"; Flags: runhidden waituntilterminated; RunOnceId: "StopService"
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Stop-PrinterWLANForUninstall.ps1"""; Flags: runhidden waituntilterminated; RunOnceId: "StopIntegrations"
 Filename: "{sys}\sc.exe"; Parameters: "delete PrinterWLAN"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteService"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""PrinterWLAN HTTP 8080"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewall"
-Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""PrinterWLAN Management Console"" /F"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteTask"
 
 [Code]
 function HasCommandLineParameter(const Name: String): Boolean;
