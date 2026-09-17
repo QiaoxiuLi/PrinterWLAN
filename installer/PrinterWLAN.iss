@@ -41,6 +41,7 @@ Source: "..\artifacts\publish\*"; DestDir: "{app}"; Flags: ignoreversion recurse
 Source: "..\third-party\runtime\LibreOffice\*"; DestDir: "{app}\third-party\LibreOffice"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\third-party\runtime\Prerequisites\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "printerwlan-console.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Register-ManagementConsoleTask.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{group}\PrinterWLAN 管理控制台"; Filename: "{cmd}"; Parameters: "/d /k ""{app}\printerwlan-console.cmd"""; WorkingDir: "{app}"
@@ -58,7 +59,7 @@ Filename: "{sys}\sc.exe"; Parameters: "description PrinterWLAN ""局域网网页
 Filename: "{sys}\sc.exe"; Parameters: "failure PrinterWLAN reset= 86400 actions= restart/5000/restart/15000/restart/60000"; Flags: runhidden waituntilterminated
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""PrinterWLAN HTTP 8080"""; Flags: runhidden waituntilterminated
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""PrinterWLAN HTTP 8080"" dir=in action=allow protocol=TCP localport=8080 program=""{app}\{#MyAppExeName}"" enable=yes"; Flags: runhidden waituntilterminated
-Filename: "{sys}\schtasks.exe"; Parameters: "/Create /TN ""PrinterWLAN Management Console"" /TR ""{cmd} /d /k """"{app}\printerwlan-console.cmd"""""" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{tmp}\Register-ManagementConsoleTask.ps1"" -InstallDirectory ""{app}"""; Flags: runhidden waituntilterminated
 Filename: "{sys}\sc.exe"; Parameters: "start Spooler"; Flags: runhidden waituntilterminated
 Filename: "{sys}\sc.exe"; Parameters: "start PrinterWLAN"; Flags: runhidden waituntilterminated
 Filename: "{app}\{#MyAppExeName}"; Parameters: "doctor"; StatusMsg: "正在检查 Windows 兼容性和内置组件..."; Flags: runhidden waituntilterminated
