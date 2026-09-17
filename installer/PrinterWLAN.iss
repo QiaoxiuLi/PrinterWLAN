@@ -115,9 +115,31 @@ begin
   Result := Pos(';' + Uppercase(ExpandConstant(Param)) + ';', ';' + Uppercase(Paths) + ';') = 0;
 end;
 
+procedure RemoveInstallDirectoryFromPath;
+var
+  Paths, AppPath, Updated, Entry: String;
+  Entries: TArrayOfString;
+  I: Integer;
+begin
+  if not RegQueryStringValue(HKLM, 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'Path', Paths) then Exit;
+  AppPath := RemoveBackslashUnlessRoot(ExpandConstant('{app}'));
+  Entries := SplitString(Paths, ';');
+  Updated := '';
+  for I := 0 to GetArrayLength(Entries) - 1 do begin
+    Entry := Trim(Entries[I]);
+    if (Entry <> '') and (CompareText(RemoveBackslashUnlessRoot(Entry), AppPath) <> 0) then begin
+      if Updated <> '' then Updated := Updated + ';';
+      Updated := Updated + Entry;
+    end;
+  end;
+  if Updated <> Paths then
+    RegWriteExpandStringValue(HKLM, 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'Path', Updated);
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then begin
+    RemoveInstallDirectoryFromPath;
     if HasCommandLineParameter('/DELETEDATA') then
       DelTree(ExpandConstant('{commonappdata}\PrinterWLAN'), True, True, True)
     else if (not HasCommandLineParameter('/PRESERVEDATA')) and (not UninstallSilent) then
