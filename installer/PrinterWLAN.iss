@@ -117,17 +117,27 @@ end;
 
 procedure RemoveInstallDirectoryFromPath;
 var
-  Paths, AppPath, Updated, Entry: String;
-  Entries: TArrayOfString;
-  I: Integer;
+  Paths, AppPath, Updated, Entry, Remaining: String;
+  Separator: Integer;
 begin
   if not RegQueryStringValue(HKLM, 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'Path', Paths) then Exit;
-  AppPath := RemoveBackslashUnlessRoot(ExpandConstant('{app}'));
-  Entries := SplitString(Paths, ';');
+  AppPath := Uppercase(Trim(ExpandConstant('{app}')));
+  while (Length(AppPath) > 3) and (AppPath[Length(AppPath)] = '\') do
+    Delete(AppPath, Length(AppPath), 1);
   Updated := '';
-  for I := 0 to GetArrayLength(Entries) - 1 do begin
-    Entry := Trim(Entries[I]);
-    if (Entry <> '') and (CompareText(RemoveBackslashUnlessRoot(Entry), AppPath) <> 0) then begin
+  Remaining := Paths;
+  while Remaining <> '' do begin
+    Separator := Pos(';', Remaining);
+    if Separator = 0 then begin
+      Entry := Trim(Remaining);
+      Remaining := '';
+    end else begin
+      Entry := Trim(Copy(Remaining, 1, Separator - 1));
+      Delete(Remaining, 1, Separator);
+    end;
+    while (Length(Entry) > 3) and (Entry[Length(Entry)] = '\') do
+      Delete(Entry, Length(Entry), 1);
+    if (Entry <> '') and (CompareText(Uppercase(Entry), AppPath) <> 0) then begin
       if Updated <> '' then Updated := Updated + ';';
       Updated := Updated + Entry;
     end;
