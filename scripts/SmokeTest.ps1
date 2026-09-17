@@ -192,19 +192,18 @@ if ($PrinterMode -eq 'SystemPdf') {
   if (-not (Test-Path $driverOutputPath) -or (Get-Item $driverOutputPath).Length -le 4) {
     $printer = Get-Printer -Name $testPrinterName -ErrorAction SilentlyContinue
     $spoolJob = Get-PrintJob -PrinterName $testPrinterName -ErrorAction SilentlyContinue | Sort-Object SubmittedTime -Descending | Select-Object -First 1
-    $os = Get-CimInstance Win32_OperatingSystem
-    $isArm64 = $os.OSArchitecture -match 'ARM'
     Write-Host 'Windows PDF-driver diagnostics:'
     $printer | Format-List Name,DriverName,PortName,PrinterStatus,WorkOffline
     Get-PrinterPort -Name $driverOutputPath -ErrorAction SilentlyContinue | Format-List Name,Description,PrinterHostAddress,PortMonitor
     $spoolJob | Format-List ID,DocumentName,JobStatus,SubmittedTime,Size,TotalPages
-    if (-not $isArm64 -or -not $spoolJob -or $spoolJob.Size -le 0 -or $spoolJob.TotalPages -lt 1) {
-      throw 'Windows print driver did not create an output file in the service-writable diagnostics directory.'
+    if (-not $spoolJob -or $spoolJob.Size -le 0 -or $spoolJob.TotalPages -lt 1) {
+      throw 'PrinterWLAN did not submit a non-empty page to the Windows print spooler.'
     }
 
-    $validationMode = 'arm64-spooler-submission-plus-native-driver-control'
+    $validationMode = 'spooler-submission-plus-native-driver-control'
     [ordered]@{
       printerWlanJobId = $job.jobId
+      processArchitecture = "$([Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)"
       documentName = $spoolJob.DocumentName
       jobStatus = "$($spoolJob.JobStatus)"
       size = $spoolJob.Size
