@@ -19,3 +19,10 @@ if ($service -and $service.Status -ne [System.ServiceProcess.ServiceControllerSt
   Stop-Service -Name 'PrinterWLAN' -Force -ErrorAction Stop
   $service.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Stopped, [TimeSpan]::FromSeconds(60))
 }
+
+$libreOfficeRoot = Join-Path $PSScriptRoot 'third-party\LibreOffice'
+if (Test-Path -LiteralPath $libreOfficeRoot) {
+  Get-ChildItem -LiteralPath $libreOfficeRoot -Directory -Filter '__pycache__' -Recurse -Force -ErrorAction SilentlyContinue |
+    Sort-Object { $_.FullName.Length } -Descending |
+    Remove-Item -Recurse -Force -ErrorAction Stop
+}
