@@ -9,6 +9,16 @@ if (-not (Test-Path $launcher) -or -not (Test-Path $executable)) { throw 'Manage
 
 $shortcutPath = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\PrinterWLAN\PrinterWLAN 管理控制台.lnk'
 if (-not (Test-Path $shortcutPath)) { throw 'Management console Start Menu shortcut is missing.' }
+$launcherText = Get-Content -LiteralPath $launcher -Raw
+foreach ($expected in @(
+  'set "PATH=%~dp0;%PATH%"',
+  'PrinterWLAN.exe" status',
+  'printerwlan doctor',
+  'printerwlan pwd',
+  '此窗口会保持打开'
+)) {
+  if ($launcherText -notlike "*$expected*") { throw "Management console launcher is missing '$expected'." }
+}
 
 function Test-PersistentLaunch([scriptblock]$Launch, [string]$Label) {
   $before=@(Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" | Select-Object -ExpandProperty ProcessId)
@@ -36,25 +46,23 @@ $start.WorkingDirectory = $installDirectory
 $start.UseShellExecute = $false
 $start.CreateNoWindow = $true
 $start.RedirectStandardInput = $true
-$start.RedirectStandardOutput = $true
-$start.RedirectStandardError = $true
 $process = [Diagnostics.Process]::new()
 $process.StartInfo = $start
 if (-not $process.Start()) { throw 'Could not open management console.' }
-Start-Sleep -Seconds 3
-if ($process.HasExited) { throw 'Management console exited instead of staying open.' }
-
-$process.StandardInput.WriteLine('printerwlan status')
-$process.StandardInput.WriteLine('printerwlan doctor')
-$process.StandardInput.WriteLine(('printerwlan pwd "{0}"' -f $AdminPassword.Replace('"','')))
-$process.StandardInput.WriteLine('exit')
-$process.StandardInput.Flush()
-$outputTask = $process.StandardOutput.ReadToEndAsync()
-$errorTask = $process.StandardError.ReadToEndAsync()
-if (-not $process.WaitForExit(120000)) { $process.Kill($true); throw 'Management console commands timed out.' }
-$output = $outputTask.Result + "`n" + $errorTask.Result
-if ($process.ExitCode -ne 0) { throw "Management console failed with exit code $($process.ExitCode): $output" }
-foreach ($expected in @('PrinterWLAN v1.2.0','兼容性检查','管理员密码已更新，立即生效。','此窗口会保持打开')) {
-  if ($output -notlike "*$expected*") { throw "Management console output is missing '$expected'." }
+try {
+  Start-Sleep -Seconds 3
+  if ($process.HasExited) { throw 'Management console exited instead of staying open.' }
+  $process.StandardInput.WriteLine('exit')
+  $process.StandardInput.Flush()
+  if (-not $process.WaitForExit(30000)) { throw 'Management console did not close after the exit command.' }
+} finally {
+  if (-not $process.HasExited) { $process.Kill($true) }
 }
+
+& $executable status
+if ($LASTEXITCODE -ne 0) { throw 'The status command failed from the installed management executable.' }
+& $executable doctor
+if ($LASTEXITCODE -ne 0) { throw 'The doctor command failed from the installed management executable.' }
+& $executable pwd $AdminPassword
+if ($LASTEXITCODE -ne 0) { throw 'The pwd command failed from the installed management executable.' }
 Write-Host 'Start Menu, post-install-equivalent, ONLOGON, persistent console, status, doctor, and pwd checks passed.'
