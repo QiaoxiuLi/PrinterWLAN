@@ -44,7 +44,7 @@ $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator
 
 ## Release 门槛
 
-只有同时满足以下条件，才可以为该 commit 创建 v1.2.0 tag：
+此门槛用于 v1.3.0 或后续 Windows Desktop 正式版本，不阻塞 Windows Server 2025 x64 的 v1.2.0。只有同时满足以下条件，才可以为该 commit 创建桌面正式版 tag：
 
 1. 在 Windows 10 x64 真机执行上述脚本并通过；
 2. 在 Windows 11 x64 真机执行上述脚本并通过；

@@ -1,6 +1,6 @@
 # PrinterWLAN
 
-PrinterWLAN 是面向受信任局域网的 Windows 网页打印服务器。它作为 Windows Service 在 **Windows 10、Windows 11 或 Windows Server x64** 上运行；手机、平板和电脑只需打开浏览器、登录、上传 PDF 或 Word 文件，即可调用主机中已经安装好的 Windows 打印机及其驱动完成打印。
+PrinterWLAN 是面向受信任局域网的 Windows 网页打印服务器。v1.2.0 作为 Windows Service 在 **Windows Server 2025 x64** 上运行；手机、平板和电脑只需打开浏览器、登录、上传 PDF 或 Word 文件，即可调用服务器中已经安装好的 Windows 打印机及其驱动完成打印。
 
 正式安装包是自包含的：包含 .NET 10 运行时、PDF.js、PDFium/SkiaSharp、独立的 LibreOffice Windows x64 运行时，以及原生组件所需的 Microsoft Visual C++ v14 运行库。目标电脑不需要自行安装 .NET、Visual C++ Runtime、Node.js、Python、Java、Microsoft Office 或 LibreOffice；安装完成后的运行也不依赖互联网、CDN、云服务或外部 API。
 
@@ -8,17 +8,16 @@ PrinterWLAN 是面向受信任局域网的 Windows 网页打印服务器。它�
 
 | 系统 | 支持范围 |
 |---|---|
-| Windows 10 x64 | 1809 / build 17763 或更高；普通 Home/Pro 建议使用最终版 22H2 / build 19045 |
-| Windows 11 x64 | 正式支持 |
-| Windows 11 ARM64 | 通过系统的 x64 兼容模式运行 |
-| Windows Server x64 | 2019、2022、2025 |
+| Windows Server 2025 x64 | v1.2.0 正式支持并由完整自动化安装、升级、浏览器与打印驱动链路验证 |
+| Windows 10 / Windows 11 | v1.2.0 不声明正式支持；更广泛桌面兼容与实体硬件验收顺延至 v1.3.0 或后续版本 |
+| 其他 Windows Server 版本 | 未纳入 v1.2.0 正式验收范围 |
 
-Windows 10 Home/Pro 已结束微软常规安全支持，PrinterWLAN 仍提供安装与兼容处理，但用于长期联网环境时建议升级到仍受支持的 Windows 11。打印机厂商驱动不属于 PrinterWLAN，必须先在 Windows 中安装；USB、本地 TCP/IP 或共享打印机应安装为这台电脑上的系统打印队列，使 `LocalSystem` 服务可以访问。
+打印机厂商驱动不属于 PrinterWLAN，必须先在 Windows Server 2025 中安装；USB、本地 TCP/IP 或共享打印机应安装为服务器上的系统打印队列，使 `LocalSystem` 服务可以访问。
 
 ## 安装与首次启动
 
 1. 从 [GitHub Releases](https://github.com/QiaoxiuLi/PrinterWLAN/releases) 下载 `PrinterWLAN-Setup-x64.exe` 和对应的 `.sha256` 文件。
-2. 在受支持的 Windows 10、Windows 11 或 Windows Server 上以管理员身份运行安装程序。
+2. 在 Windows Server 2025 x64 上以管理员身份运行安装程序。
 3. 安装程序会离线配置全部随包运行组件，创建依赖 Windows Print Spooler 的 `PrinterWLAN` 延迟自动启动服务、TCP 8080 入站防火墙规则、系统 PATH、开始菜单入口，以及管理员登录桌面时打开的管理 CMD 任务。
 4. 在自动打开的管理窗口中设置管理员密码：
 
@@ -126,11 +125,11 @@ dotnet publish src/PrinterWLAN/PrinterWLAN.csproj -c Release -r win-x64 --self-c
 
 ## GitHub Actions
 
-CI 首先在 `windows-2025` 执行 locked restore、Release build、单元/集成测试、`win-x64` self-contained publish、依赖下载与 SHA-256 校验、Inno Setup 编译、静默安装、Windows Service/HTTP/CLI/登录/PDF/Word/Fake printer smoke test、Playwright 多 viewport 测试和静默卸载。随后同一个 x64 安装包必须在 GitHub 的 Windows 11 ARM Desktop runner 上通过安装、`doctor`、LibreOffice、PDFium、SQLite 和服务配置；PrinterWLAN 必须向真实 Spooler 提交非空单页任务，原生 ARM64 控制进程还必须通过同一 `Microsoft Print to PDF` 驱动产生有效 PDF，Release job 才能继续。Windows 10/11 x64 真机不启用 ARM 特例，必须由 PrinterWLAN 端到端生成有效 PDF。
+`Windows Server 2025 CI` 在 `windows-2025` 执行 locked restore、Release build、单元/集成测试、`win-x64` self-contained publish、固定第三方依赖及 SHA-256 校验、Inno Setup 编译、v1.1.0 原地升级、真实 Windows PDF 打印驱动、Fake printer、管理控制台、服务恢复策略、非 loopback 局域网 HTTP、Playwright 多 viewport、数据保留/删除卸载和安装包校验。
 
-仓库还提供 [`scripts/WindowsClientAcceptance.ps1`](scripts/WindowsClientAcceptance.ps1)。在 Windows 10 x64 真机上运行它，可以执行与 Windows 11 CI 相同的安装、登录、PDF/Word、管理员统一打印机、Windows 打印驱动、服务和卸载前检查，并生成 `compatibility-evidence.json` 验收证据。CI 的 Windows 11 结果不能冒充 Windows 10 真机结果。
+`Release PrinterWLAN v1.2.0 for Windows Server 2025` 只接受固定的 `v1.2.0` tag，并重新执行完整 Server 2025 门槛；成功后创建非 Draft、非 Prerelease Release，上传安装包、SHA-256 和中文用户说明 PDF。它不读取 Windows 10、Windows 11 或实体打印机验收变量，因此桌面计划不会阻塞 Server 2025 正式版。
 
-推送 `v*` tag 会运行相同完整验证，然后使用 GitHub 官方 `gh` CLI 创建非 Draft、非 Prerelease Release，并上传安装包与 SHA-256。
+未来桌面支持保留在独立的 `Future Windows Desktop Release Gate (v1.3+)` 手动工作流和 [`scripts/WindowsClientAcceptance.ps1`](scripts/WindowsClientAcceptance.ps1) 中。该门槛仍要求同一 commit 的 Windows 10 x64、Windows 11 x64 与实体打印机证据，但不属于 v1.2.0 的支持声明。
 
 ## 项目结构
 

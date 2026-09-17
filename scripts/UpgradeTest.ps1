@@ -22,6 +22,11 @@ function Get-Headers($Session) { return @{ 'X-CSRF-Token'=(Get-Csrf $Session); '
 
 $oldInstaller=Join-Path $OutputDirectory 'PrinterWLAN-v1.1.0-Setup-x64.exe'
 Invoke-WebRequest 'https://github.com/QiaoxiuLi/PrinterWLAN/releases/download/v1.1.0/PrinterWLAN-Setup-x64.exe' -OutFile $oldInstaller
+$oldChecksum=Join-Path $OutputDirectory 'PrinterWLAN-v1.1.0-Setup-x64.exe.sha256'
+Invoke-WebRequest 'https://github.com/QiaoxiuLi/PrinterWLAN/releases/download/v1.1.0/PrinterWLAN-Setup-x64.exe.sha256' -OutFile $oldChecksum
+$expectedHash=((Get-Content $oldChecksum -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+$actualHash=(Get-FileHash $oldInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actualHash -ne $expectedHash) { throw 'Downloaded v1.1.0 installer did not match its published SHA-256.' }
 Start-Process $oldInstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/FAKEPRINTER') -Wait
 Wait-ForHealth
 & "$env:ProgramFiles\PrinterWLAN\PrinterWLAN.exe" pwd $AdminPassword
@@ -34,12 +39,26 @@ Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/settings' -Method Put -WebSes
 $csvPath=Join-Path $OutputDirectory 'upgrade-users.csv'
 [IO.File]::WriteAllText($csvPath,"用户名`r`n升级保留用户`r`n",[Text.UTF8Encoding]::new($true))
 Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/users/import' -Method Post -WebSession $before -Headers (Get-Headers $before) -Form @{file=Get-Item $csvPath} | Out-Null
+$beforeExport=Join-Path $OutputDirectory 'v1.1-users.csv'
+Invoke-WebRequest 'http://127.0.0.1:8080/api/admin/users/export' -WebSession $before -OutFile $beforeExport | Out-Null
+$beforeCredential=Import-Csv $beforeExport | Where-Object 用户名 -eq '升级保留用户' | Select-Object -First 1
+if (-not $beforeCredential.密码) { throw 'v1.1.0 user credential could not be exported.' }
+$userBefore=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
+Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $userBefore | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSession $userBefore -Headers (Get-Headers $userBefore) -ContentType 'application/json' -Body (@{username='升级保留用户';password=$beforeCredential.密码}|ConvertTo-Json) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/events' -Method Post -WebSession $userBefore -Headers (Get-Headers $userBefore) -ContentType 'application/json' -Body (@{type='page_view';page='upgrade-preservation'}|ConvertTo-Json) | Out-Null
+$recordsBefore=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/records?page=1&pageSize=50' -WebSession $before
+if ($recordsBefore.total -lt 1) { throw 'v1.1.0 activity data was not created.' }
+$diagnosticMarker='C:\ProgramData\PrinterWLAN\Diagnostics\upgrade-preservation.txt'
+[IO.File]::WriteAllText($diagnosticMarker,'preserve diagnostics',[Text.UTF8Encoding]::new($false))
 $beforePrinters=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $before
 $selectedPrinter=$beforePrinters.printers | Where-Object name -eq 'PrinterWLAN Test Printer A' | Select-Object -First 1
 if (-not $selectedPrinter) { throw 'v1.1.0 fake printer was unavailable.' }
 Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printer' -Method Put -WebSession $before -Headers (Get-Headers $before) -ContentType 'application/json' -Body (@{printerId=$selectedPrinter.id}|ConvertTo-Json) | Out-Null
 
-Start-Process $CurrentInstallerPath -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/FAKEPRINTER') -Wait
+$upgradeProcess=Start-Process $CurrentInstallerPath -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/FAKEPRINTER') -Wait -PassThru
+if ($upgradeProcess.ExitCode -ne 0) { throw "v1.2.0 in-place installer failed with exit code $($upgradeProcess.ExitCode)." }
+if (-not (Get-Service PrinterWLAN -ErrorAction SilentlyContinue)) { throw 'PrinterWLAN service disappeared during the in-place upgrade.' }
 Wait-ForHealth
 $after=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 $bootstrap=Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $after
@@ -47,6 +66,16 @@ if ($bootstrap.siteName -ne 'PrinterWLAN Upgrade Preserved' -or $bootstrap.versi
 Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $after -Headers (Get-Headers $after) -ContentType 'application/json' -Body (@{password=$AdminPassword}|ConvertTo-Json) | Out-Null
 $users=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/users?query=%E5%8D%87%E7%BA%A7%E4%BF%9D%E7%95%99%E7%94%A8%E6%88%B7&page=1&pageSize=50' -WebSession $after
 if ($users.total -ne 1) { throw 'Upgrade did not preserve the existing user.' }
+$afterExport=Join-Path $OutputDirectory 'v1.2-users.csv'
+Invoke-WebRequest 'http://127.0.0.1:8080/api/admin/users/export' -WebSession $after -OutFile $afterExport | Out-Null
+$afterCredential=Import-Csv $afterExport | Where-Object 用户名 -eq '升级保留用户' | Select-Object -First 1
+if ($afterCredential.密码 -ne $beforeCredential.密码) { throw 'Upgrade changed the existing user password data.' }
+$userAfter=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
+Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $userAfter | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSession $userAfter -Headers (Get-Headers $userAfter) -ContentType 'application/json' -Body (@{username='升级保留用户';password=$beforeCredential.密码}|ConvertTo-Json) | Out-Null
+$recordsAfter=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/records?page=1&pageSize=100' -WebSession $after
+if ($recordsAfter.total -lt $recordsBefore.total -or -not ($recordsAfter.items | Where-Object type -eq 'page_view')) { throw 'Upgrade did not preserve Activity database records.' }
+if (-not (Test-Path $diagnosticMarker) -or (Get-Content $diagnosticMarker -Raw) -ne 'preserve diagnostics') { throw 'Upgrade did not preserve Diagnostics data.' }
 $printers=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $after
 if ($printers.selectedPrinterId -ne $selectedPrinter.id -or $printers.selectedPrinterName -ne $selectedPrinter.name) { throw 'Upgrade did not preserve the administrator printer selection.' }
-Write-Host 'v1.1.0 to v1.2.0 upgrade preserved the site, users, credentials, and administrator printer selection.'
+Write-Host 'v1.1.0 to v1.2.0 in-place upgrade preserved the site, administrator password, users, user password data, printer selection, Activity records, Diagnostics, and service identity.'

@@ -6,9 +6,6 @@
     <AssemblyName>PrinterWLAN</AssemblyName>
     <RootNamespace>PrinterWLAN</RootNamespace>
     <OutputType>Exe</OutputType>
-    <Version>1.2.0</Version>
-    <AssemblyVersion>1.2.0.0</AssemblyVersion>
-    <FileVersion>1.2.0.0</FileVersion>
     <Product>PrinterWLAN</Product>
     <Company>QIAOXIU LI</Company>
     <Copyright>Copyright © 2026 QIAOXIU LI</Copyright>
@@ -31,4 +28,13 @@
     <Content Include="..\..\THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="WriteInstallerVersion" AfterTargets="Build">
+    <ItemGroup>
+      <_InstallerVersionLine Include="#define MyAppVersion &quot;$(ProductVersion)&quot;" />
+      <_InstallerVersionLine Include="#define MyAppFileVersion &quot;$(FileVersion)&quot;" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(MSBuildProjectDirectory)\..\..\installer\generated-version.iss"
+                      Lines="@(_InstallerVersionLine)"
+                      Overwrite="true" Encoding="UTF-8" />
+  </Target>
 </Project>

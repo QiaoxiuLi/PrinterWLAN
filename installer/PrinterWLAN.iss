@@ -1,5 +1,5 @@
 #define MyAppName "PrinterWLAN"
-#define MyAppVersion "1.2.0"
+#include "generated-version.iss"
 #define MyAppPublisher "QIAOXIU LI"
 #define MyAppExeName "PrinterWLAN.exe"
 
@@ -20,9 +20,9 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 WizardStyle=modern
 UninstallDisplayName=PrinterWLAN
-VersionInfoVersion=1.2.0.0
+VersionInfoVersion={#MyAppFileVersion}
 VersionInfoProductName=PrinterWLAN
-VersionInfoProductVersion=1.2.0
+VersionInfoProductVersion={#MyAppVersion}
 VersionInfoCompany=QIAOXIU LI
 LicenseFile=..\LICENSE
 MinVersion=10.0.17763
@@ -43,7 +43,7 @@ Source: "..\third-party\runtime\Prerequisites\VC_redist.x64.exe"; DestDir: "{tmp
 Source: "printerwlan-console.cmd"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\PrinterWLAN 管理控制台"; Filename: "{app}\printerwlan-console.cmd"; WorkingDir: "{app}"
+Name: "{group}\PrinterWLAN 管理控制台"; Filename: "{cmd}"; Parameters: "/d /k ""{app}\printerwlan-console.cmd"""; WorkingDir: "{app}"
 Name: "{group}\卸载 PrinterWLAN"; Filename: "{uninstallexe}"
 
 [Registry]
@@ -58,11 +58,11 @@ Filename: "{sys}\sc.exe"; Parameters: "description PrinterWLAN ""局域网网页
 Filename: "{sys}\sc.exe"; Parameters: "failure PrinterWLAN reset= 86400 actions= restart/5000/restart/15000/restart/60000"; Flags: runhidden waituntilterminated
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""PrinterWLAN HTTP 8080"""; Flags: runhidden waituntilterminated
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""PrinterWLAN HTTP 8080"" dir=in action=allow protocol=TCP localport=8080 program=""{app}\{#MyAppExeName}"" enable=yes"; Flags: runhidden waituntilterminated
-Filename: "{sys}\schtasks.exe"; Parameters: "/Create /TN ""PrinterWLAN Management Console"" /TR ""{app}\printerwlan-console.cmd"" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden waituntilterminated
+Filename: "{sys}\schtasks.exe"; Parameters: "/Create /TN ""PrinterWLAN Management Console"" /TR ""{cmd} /d /k """"{app}\printerwlan-console.cmd"""""" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden waituntilterminated
 Filename: "{sys}\sc.exe"; Parameters: "start Spooler"; Flags: runhidden waituntilterminated
 Filename: "{sys}\sc.exe"; Parameters: "start PrinterWLAN"; Flags: runhidden waituntilterminated
 Filename: "{app}\{#MyAppExeName}"; Parameters: "doctor"; StatusMsg: "正在检查 Windows 兼容性和内置组件..."; Flags: runhidden waituntilterminated
-Filename: "{app}\printerwlan-console.cmd"; Description: "打开 PrinterWLAN 管理控制台"; Flags: postinstall nowait skipifsilent
+Filename: "{cmd}"; Parameters: "/d /k ""{app}\printerwlan-console.cmd"""; WorkingDir: "{app}"; Description: "打开 PrinterWLAN 管理控制台"; Flags: postinstall nowait skipifsilent
 
 [UninstallRun]
 Filename: "{sys}\sc.exe"; Parameters: "stop PrinterWLAN"; Flags: runhidden waituntilterminated; RunOnceId: "StopService"
@@ -116,9 +116,13 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  if (CurUninstallStep = usPostUninstall) and (not UninstallSilent) then
-    if MsgBox('是否保留 C:\ProgramData\PrinterWLAN 中的用户配置和日志？' + #13#10 + #13#10 +
-      '建议选择“是”，以后重新安装时可以继续使用。选择“否”将永久删除全部数据。',
-      mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
-      DelTree(ExpandConstant('{commonappdata}\PrinterWLAN'), True, True, True);
+  if CurUninstallStep = usPostUninstall then begin
+    if HasCommandLineParameter('/DELETEDATA') then
+      DelTree(ExpandConstant('{commonappdata}\PrinterWLAN'), True, True, True)
+    else if (not HasCommandLineParameter('/PRESERVEDATA')) and (not UninstallSilent) then
+      if MsgBox('是否保留 C:\ProgramData\PrinterWLAN 中的用户配置和日志？' + #13#10 + #13#10 +
+        '建议选择“是”，以后重新安装时可以继续使用。选择“否”将永久删除全部数据。',
+        mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
+        DelTree(ExpandConstant('{commonappdata}\PrinterWLAN'), True, True, True);
+  end;
 end;

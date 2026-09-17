@@ -2,7 +2,8 @@ param(
   [string]$InstallerPath,
   [string]$OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts/smoke'),
   [string]$AdminPassword = $env:PRINTERWLAN_ADMIN_PASSWORD,
-  [ValidateSet('Fake','SystemPdf')][string]$PrinterMode = 'Fake'
+  [ValidateSet('Fake','SystemPdf')][string]$PrinterMode = 'Fake',
+  [bool]$CleanInstall = $true
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $InstallerPath)) { throw "Installer not found: $InstallerPath" }
@@ -79,6 +80,13 @@ function Get-Csrf($Session) { return ($Session.Cookies.GetCookies('http://127.0.
 function Get-Headers($Session) { return @{ 'X-CSRF-Token'=(Get-Csrf $Session); 'X-Device-Id'='00000000-0000-4000-8000-000000000001'; 'X-Session-Id'='smoke-test-session'; 'X-Viewport'='1366x768'; 'X-Screen'='1920x1080'; 'X-Timezone'='UTC' } }
 
 try {
+if ($CleanInstall) {
+  $existingUninstaller = "$env:ProgramFiles\PrinterWLAN\unins000.exe"
+  if (Test-Path $existingUninstaller) {
+    $cleanup=Start-Process $existingUninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DELETEDATA') -Wait -PassThru
+    if ($cleanup.ExitCode -ne 0) { throw "Could not clean the previous smoke-test installation (exit $($cleanup.ExitCode))." }
+  }
+}
 if ($PrinterMode -eq 'SystemPdf') { Install-SystemPdfPrinter }
 $installerArguments = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART')
 if ($PrinterMode -eq 'Fake') { $installerArguments += '/FAKEPRINTER' }
@@ -92,18 +100,31 @@ if ($LASTEXITCODE -ne 0) { throw 'printerwlan status failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'printerwlan doctor found a compatibility problem.' }
 & "$env:ProgramFiles\PrinterWLAN\PrinterWLAN.exe" pwd $AdminPassword
 if ($LASTEXITCODE -ne 0) { throw 'printerwlan pwd failed.' }
+& (Join-Path $PSScriptRoot 'ConsoleTest.ps1') -AdminPassword $AdminPassword
+
+$service = Get-CimInstance Win32_Service -Filter "Name='PrinterWLAN'"
+if (-not $service -or $service.StartMode -ne 'Auto' -or $service.StartName -ne 'LocalSystem') { throw 'PrinterWLAN service identity or automatic start mode is incorrect.' }
+$serviceRegistry = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\PrinterWLAN'
+if ($serviceRegistry.DelayedAutoStart -ne 1 -or @($serviceRegistry.DependOnService) -notcontains 'Spooler') { throw 'PrinterWLAN service is not delayed-auto or does not depend on Spooler.' }
+$failurePolicy = (& sc.exe qfailure PrinterWLAN | Out-String)
+if ($failurePolicy -notmatch '5000' -or $failurePolicy -notmatch '15000' -or $failurePolicy -notmatch '60000') { throw 'PrinterWLAN service recovery policy is incomplete.' }
+$firewallRules = @(Get-NetFirewallRule -DisplayName 'PrinterWLAN HTTP 8080' -ErrorAction SilentlyContinue)
+if ($firewallRules.Count -ne 1 -or $firewallRules[0].Enabled -ne 'True') { throw 'PrinterWLAN firewall rule is missing or duplicated.' }
+$machinePath = [Environment]::GetEnvironmentVariable('Path','Machine')
+if (($machinePath -split ';') -notcontains "$env:ProgramFiles\PrinterWLAN") { throw 'PrinterWLAN install directory is missing from machine PATH.' }
+$lanIp = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.)' -and $_.InterfaceAlias -notmatch 'Loopback' } | Sort-Object InterfaceMetric | Select-Object -ExpandProperty IPAddress -First 1
+if (-not $lanIp) { throw 'No non-loopback IPv4 address is available for the LAN HTTP regression test.' }
+$lanBaseUrl = "http://${lanIp}:8080"
+if ((Invoke-RestMethod "$lanBaseUrl/health" -TimeoutSec 10).status -ne 'ok') { throw "LAN health check failed at $lanBaseUrl." }
+"PRINTERWLAN_BASE_URL=$lanBaseUrl" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+"PRINTERWLAN_REQUIRE_LAN_HTTP=1" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+Write-Host "Real non-loopback LAN HTTP target: $lanBaseUrl"
 
 $admin=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $admin | Out-Null
 Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $admin -Headers (Get-Headers $admin) -ContentType 'application/json' -Body (@{password=$AdminPassword}|ConvertTo-Json) | Out-Null
 $printerState=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $admin
 if ($PrinterMode -eq 'Fake' -and $printerState.printers.Count -ne 2) { throw 'Fake printer inventory was not available to the administrator.' }
-$expectedPrinterName = if ($PrinterMode -eq 'Fake') { 'PrinterWLAN Test Printer A' } else { $testPrinterName }
-$selectedPrinter=$printerState.printers | Where-Object name -eq $expectedPrinterName | Select-Object -First 1
-if (-not $selectedPrinter) { throw "Expected printer was not found: $expectedPrinterName" }
-Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printer' -Method Put -WebSession $admin -Headers (Get-Headers $admin) -ContentType 'application/json' -Body (@{printerId=$selectedPrinter.id}|ConvertTo-Json) | Out-Null
-$persistedPrinter=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $admin
-if ($persistedPrinter.selectedPrinterId -ne $selectedPrinter.id) { throw 'Administrator printer selection did not persist.' }
 $csvPath=Join-Path $OutputDirectory 'users.csv'; [IO.File]::WriteAllText($csvPath,"用户名`r`n测试用户`r`n",[Text.UTF8Encoding]::new($true))
 Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/users/import' -Method Post -WebSession $admin -Headers (Get-Headers $admin) -Form @{file=Get-Item $csvPath} | Out-Null
 $exportPath=Join-Path $OutputDirectory 'users-export.csv'
@@ -118,8 +139,39 @@ Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSessio
 $pdfPath=Join-Path $OutputDirectory 'sample.pdf';New-TestPdf $pdfPath
 $upload=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/documents' -Method Post -WebSession $user -Headers (Get-Headers $user) -Form @{file=Get-Item $pdfPath;clientLastModified='2026-09-15T00:00:00Z'}
 if ($upload.totalPages -ne 1) { throw 'PDF page count smoke test failed.' }
+$unconfigured=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/print-capabilities' -WebSession $user
+if ($unconfigured.configured -or $unconfigured.available) { throw 'A fresh installation unexpectedly selected a printer.' }
+$previewResponse=Invoke-WebRequest "http://127.0.0.1:8080/api/user/documents/$($upload.id)/preview" -WebSession $user
+if ($previewResponse.StatusCode -ne 200 -or $previewResponse.Headers.'Content-Type' -notmatch 'application/pdf') { throw 'Upload/preview was not available before printer configuration.' }
+$blockedJob=Invoke-WebRequest 'http://127.0.0.1:8080/api/user/jobs' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json' -Body (@{documentId=$upload.id;paperSize='A4'}|ConvertTo-Json) -SkipHttpErrorCheck
+if ($blockedJob.StatusCode -ne 400 -or $blockedJob.Content -notmatch '暂未配置打印机') { throw 'Printing was not blocked while no administrator printer was configured.' }
+
+$expectedPrinterName = if ($PrinterMode -eq 'Fake') { 'PrinterWLAN Test Printer A' } else { $testPrinterName }
+$selectedPrinter=$printerState.printers | Where-Object name -eq $expectedPrinterName | Select-Object -First 1
+if (-not $selectedPrinter) { throw "Expected printer was not found: $expectedPrinterName" }
+Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printer' -Method Put -WebSession $admin -Headers (Get-Headers $admin) -ContentType 'application/json' -Body (@{printerId=$selectedPrinter.id}|ConvertTo-Json) | Out-Null
+Restart-Service PrinterWLAN -Force
+$deadline=(Get-Date).AddMinutes(2)
+do { try { $health=Invoke-RestMethod 'http://127.0.0.1:8080/health' -TimeoutSec 3; break } catch { Start-Sleep -Seconds 2 } } while ((Get-Date) -lt $deadline)
+if ($health.status -ne 'ok') { throw 'Service did not recover after the printer persistence restart test.' }
+$admin=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
+Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $admin | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $admin -Headers (Get-Headers $admin) -ContentType 'application/json' -Body (@{password=$AdminPassword}|ConvertTo-Json) | Out-Null
+$persistedPrinter=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $admin
+if ($persistedPrinter.selectedPrinterId -ne $selectedPrinter.id -or $persistedPrinter.selectedPrinterName -ne $selectedPrinter.name) { throw 'Administrator printer selection did not survive a service restart.' }
+$user=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
+Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $user | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json' -Body (@{username='测试用户';password=$credentials.密码}|ConvertTo-Json) | Out-Null
+
 $capabilities=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/print-capabilities' -WebSession $user
 if (-not $capabilities.available -or $capabilities.PSObject.Properties.Name -contains 'name' -or $capabilities.PSObject.Properties.Name -contains 'id') { throw 'User capability endpoint exposed an invalid printer state or identity.' }
+foreach ($field in @('printer','printerId','printerName','targetPrinter')) {
+  $injectedBody=@{documentId=$upload.id;paperSize='A4'}
+  $injectedBody[$field]='PrinterWLAN Test Printer B'
+  $injected=$injectedBody|ConvertTo-Json
+  $response=Invoke-WebRequest 'http://127.0.0.1:8080/api/user/jobs' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json' -Body $injected -SkipHttpErrorCheck
+  if ($response.StatusCode -ne 400) { throw "Printer identity injection field '$field' was not rejected." }
+}
 $paper = $capabilities.paperSizes | Where-Object name -eq 'A4' | Select-Object -First 1
 if (-not $paper) { $paper = $capabilities.paperSizes | Select-Object -First 1 }
 if (-not $paper) { throw 'Selected printer did not expose a paper size.' }
@@ -191,7 +243,9 @@ $docxPath=Join-Path $OutputDirectory '中文 sample.docx';New-TestDocx $docxPath
 $word=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/documents' -Method Post -WebSession $user -Headers (Get-Headers $user) -Form @{file=Get-Item $docxPath;clientLastModified='2026-09-15T00:00:00Z'}
 if ($word.totalPages -lt 1) { throw 'Word to PDF conversion smoke test failed.' }
 Invoke-RestMethod "http://127.0.0.1:8080/api/user/documents/$($word.id)" -Method Delete -WebSession $user -Headers (Get-Headers $user) | Out-Null
-Write-Host "Installer, service, HTTP, authentication, PDF, Word, and $PrinterMode print smoke tests passed."
+$tempFiles=@(Get-ChildItem 'C:\ProgramData\PrinterWLAN\Temp' -File -Recurse -ErrorAction SilentlyContinue)
+if ($tempFiles.Count -ne 0) { throw "Temporary document cleanup left $($tempFiles.Count) file(s)." }
+Write-Host "Installer, service, LAN HTTP, authentication, printer policy, PDF, Word, temporary cleanup, and $PrinterMode print smoke tests passed."
 }
 finally {
   if ($PrinterMode -eq 'SystemPdf') { Remove-SystemPdfPrinter }

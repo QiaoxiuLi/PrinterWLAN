@@ -1,0 +1,68 @@
+name: Future Windows Desktop Release Gate (v1.3+)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-desktop-candidate:
+    name: Build desktop compatibility candidate
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with: { dotnet-version: 10.0.401 }
+      - name: Build installer
+        shell: pwsh
+        run: |
+          ./scripts/Prepare-ThirdParty.ps1
+          dotnet restore PrinterWLAN.slnx --locked-mode
+          dotnet build PrinterWLAN.slnx -c Release --no-restore
+          dotnet test PrinterWLAN.slnx -c Release --no-build
+          dotnet publish src/PrinterWLAN/PrinterWLAN.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/publish
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\PrinterWLAN.iss
+      - uses: actions/upload-artifact@v5
+        with:
+          name: PrinterWLAN-future-desktop-candidate
+          path: artifacts/installer/PrinterWLAN-Setup-x64.exe
+          if-no-files-found: error
+
+  windows-11-desktop-compatibility:
+    name: Windows 11 Desktop compatibility
+    needs: build-desktop-candidate
+    runs-on: windows-11-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: PrinterWLAN-future-desktop-candidate
+          path: downloaded-artifact
+      - name: Install and validate desktop-native dependencies and print path
+        shell: pwsh
+        run: |
+          $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          $installer=(Get-ChildItem downloaded-artifact -Filter PrinterWLAN-Setup-x64.exe -Recurse | Select-Object -First 1).FullName
+          ./scripts/WindowsClientAcceptance.ps1 -InstallerPath $installer -AdminPassword $password -OutputDirectory artifacts/windows-11-smoke
+      - name: Clean up desktop test instance
+        if: always()
+        shell: pwsh
+        run: |
+          $uninstaller="$env:ProgramFiles\PrinterWLAN\unins000.exe"
+          if (Test-Path $uninstaller) { Start-Process $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DELETEDATA') -Wait }
+
+  require-future-desktop-acceptance:
+    name: Require Windows 10, Windows 11, and physical printer evidence
+    needs: windows-11-desktop-compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check acceptance commit pins
+        env:
+          EXPECTED: ${{ github.sha }}
+          WINDOWS10: ${{ vars.PRINTERWLAN_WINDOWS10_VALIDATED_COMMIT }}
+          WINDOWS11: ${{ vars.PRINTERWLAN_WINDOWS11_VALIDATED_COMMIT }}
+          PHYSICAL: ${{ vars.PRINTERWLAN_PHYSICAL_PRINTER_VALIDATED_COMMIT }}
+        run: |
+          test "$WINDOWS10" = "$EXPECTED" || { echo 'Windows 10 x64 evidence is missing for this commit.'; exit 1; }
+          test "$WINDOWS11" = "$EXPECTED" || { echo 'Windows 11 x64 evidence is missing for this commit.'; exit 1; }
+          test "$PHYSICAL" = "$EXPECTED" || { echo 'Physical-printer evidence is missing for this commit.'; exit 1; }

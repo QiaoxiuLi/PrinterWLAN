@@ -126,12 +126,41 @@ public sealed class DatabaseBehaviorTests : IDisposable
         Assert.NotEqual(queuedForA.PrinterId, queuedForB.PrinterId);
     }
 
+    [Fact]
+    public async Task RemovedConfiguredPrinterIsNotReplacedByAnotherInstalledPrinter()
+    {
+        Environment.SetEnvironmentVariable("PRINTERWLAN_DATA_DIR", _directory);
+        var paths = new AppPaths();
+        var database = new AppDatabase(paths);
+        await database.InitializeAsync();
+        await new PrinterSelectionService(database, new FakePrinterService()).SelectAsync(FakePrinterService.Capability.Id);
+
+        var afterRemoval = new PrinterSelectionService(database, new RemainingPrinterService());
+        var state = await afterRemoval.GetStateAsync();
+
+        Assert.Equal("unavailable", state.Status);
+        Assert.Equal(FakePrinterService.Capability.Id, state.SelectedPrinterId);
+        Assert.Null(state.SelectedPrinter);
+        var error = await Assert.ThrowsAsync<PrintValidationException>(() => afterRemoval.GetSelectedAsync());
+        Assert.Equal("管理员设置的打印机当前不可用，请联系管理员。", error.Message);
+    }
+
     private static PrintSubmissionRequest NewSubmission() => new()
     {
         DocumentId = "document",
         PaperSize = "A4",
         ColorMode = "color"
     };
+
+    private sealed class RemainingPrinterService : IPrinterService
+    {
+        public Task<IReadOnlyList<PrinterCapability>> GetPrintersAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<PrinterCapability>>([FakePrinterService.SecondaryCapability]);
+        public Task<PrinterCapability> ValidateAsync(PrintRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public Task SubmitAsync(DocumentRecord document, PrintRequest request, string jobId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
 
     public void Dispose()
     {

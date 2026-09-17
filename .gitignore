@@ -24,6 +24,7 @@ src/PrinterWLAN/wwwroot/vendor/pdfjs/*
 !src/PrinterWLAN/wwwroot/vendor/pdfjs/.gitkeep
 third-party/runtime/
 third-party/downloads/
+installer/generated-version.iss
 *.msi
 *.exe
 *.zip

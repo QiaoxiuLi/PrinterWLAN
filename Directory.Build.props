@@ -1,5 +1,9 @@
 <Project>
   <PropertyGroup>
+    <ProductVersion>1.2.0</ProductVersion>
+    <Version>$(ProductVersion)</Version>
+    <AssemblyVersion>$(ProductVersion).0</AssemblyVersion>
+    <FileVersion>$(ProductVersion).0</FileVersion>
     <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

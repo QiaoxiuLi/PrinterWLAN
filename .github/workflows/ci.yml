@@ -9,7 +9,7 @@ permissions:
 jobs:
   build-test-installer:
     runs-on: windows-2025
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
       DOTNET_NOLOGO: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
@@ -42,7 +42,10 @@ jobs:
       - name: Upgrade from v1.1.0 without data loss
         shell: pwsh
         run: ./scripts/UpgradeTest.ps1 -CurrentInstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe
-      - name: Installer smoke test
+      - name: Windows print-driver smoke test
+        shell: pwsh
+        run: ./scripts/SmokeTest.ps1 -InstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe -PrinterMode SystemPdf -OutputDirectory ./artifacts/system-smoke
+      - name: Fake-printer installer smoke test
         shell: pwsh
         run: ./scripts/SmokeTest.ps1 -InstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe
       - name: Playwright browser tests
@@ -52,13 +55,9 @@ jobs:
           npm ci
           npx playwright install chromium
           npm test
-      - name: Uninstall smoke test
+      - name: Uninstall preservation and deletion tests
         shell: pwsh
-        run: |
-          $uninstaller = "$env:ProgramFiles\PrinterWLAN\unins000.exe"
-          if (-not (Test-Path $uninstaller)) { throw 'Uninstaller missing.' }
-          Start-Process $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait
-          if (Get-Service PrinterWLAN -ErrorAction SilentlyContinue) { throw 'Service still exists after uninstall.' }
+        run: ./scripts/UninstallTest.ps1 -InstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe
       - name: Generate checksum
         shell: pwsh
         run: |
@@ -84,52 +83,4 @@ jobs:
             **/TestResults/*.trx
             tests/PrinterWLAN.UiTests/playwright-report/
             artifacts/diagnostics/
-          if-no-files-found: warn
-
-  windows-11-desktop-compatibility:
-    name: Windows 11 Desktop compatibility
-    needs: build-test-installer
-    runs-on: windows-11-arm
-    timeout-minutes: 45
-    env:
-      DOTNET_NOLOGO: true
-      DOTNET_CLI_TELEMETRY_OPTOUT: true
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
-        with:
-          name: PrinterWLAN-v1.2.0-windows-x64
-          path: downloaded-artifact
-      - name: Full desktop installation, spooler, and native-driver test
-        shell: pwsh
-        run: |
-          $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
-          $installer=(Get-ChildItem downloaded-artifact -Filter PrinterWLAN-Setup-x64.exe -Recurse | Select-Object -First 1).FullName
-          if (-not $installer) { throw 'Downloaded installer was not found.' }
-          ./scripts/WindowsClientAcceptance.ps1 -InstallerPath $installer -AdminPassword $password -OutputDirectory artifacts/windows-11-smoke
-      - name: Uninstall desktop test instance
-        if: always()
-        shell: pwsh
-        run: |
-          $uninstaller="$env:ProgramFiles\PrinterWLAN\unins000.exe"
-          if (Test-Path $uninstaller) {
-            Start-Process $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait
-          }
-          if (Get-Service PrinterWLAN -ErrorAction SilentlyContinue) { throw 'Service still exists after Windows 11 uninstall.' }
-      - name: Collect Windows 11 diagnostics
-        if: always()
-        shell: pwsh
-        run: |
-          $source = 'C:\ProgramData\PrinterWLAN\Diagnostics'
-          $destination = 'artifacts/windows-11-smoke/Diagnostics'
-          if (Test-Path $source) {
-            New-Item -ItemType Directory -Force -Path $destination | Out-Null
-            Copy-Item (Join-Path $source '*') $destination -Recurse -Force
-          }
-      - name: Upload Windows 11 evidence
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: PrinterWLAN-v1.2.0-windows-11-desktop-evidence
-          path: artifacts/windows-11-smoke/
           if-no-files-found: warn

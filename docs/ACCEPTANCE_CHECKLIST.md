@@ -1,4 +1,4 @@
-# PrinterWLAN v1.1.0 Acceptance Checklist
+# PrinterWLAN v1.2.0 Windows Server 2025 Acceptance Checklist
 
 只有 Windows Server 2025 Release workflow 实际通过后，发布提交才会把所有硬性项目标记为完成。本清单中的实现项均有源码或自动测试路径；真实纸张输出单独注明，不用 Fake 结果冒充物理打印。
 
