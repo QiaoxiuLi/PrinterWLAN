@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 set "PATH=%~dp0;%PATH%"
 title PrinterWLAN
 echo.

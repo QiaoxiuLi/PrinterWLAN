@@ -9,8 +9,9 @@ if (-not (Test-Path $launcher) -or -not (Test-Path $executable)) { throw 'Manage
 
 $shortcutPath = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\PrinterWLAN\PrinterWLAN 管理控制台.lnk'
 if (-not (Test-Path $shortcutPath)) { throw 'Management console Start Menu shortcut is missing.' }
-$launcherText = Get-Content -LiteralPath $launcher -Raw
+$launcherText = Get-Content -LiteralPath $launcher -Raw -Encoding UTF8
 foreach ($expected in @(
+  'chcp 65001 >nul',
   'set "PATH=%~dp0;%PATH%"',
   'PrinterWLAN.exe" status',
   'printerwlan doctor',
