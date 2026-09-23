@@ -38,6 +38,7 @@ jobs:
         shell: pwsh
         run: |
           $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          Write-Host "::add-mask::$password"
           "PRINTERWLAN_ADMIN_PASSWORD=$password" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Upgrade from v1.1.0 without data loss
         shell: pwsh

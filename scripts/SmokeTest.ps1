@@ -220,7 +220,10 @@ $exportPath=Join-Path $OutputDirectory 'users-export.csv'
 Invoke-WebRequest 'http://127.0.0.1:8080/api/admin/users/export' -WebSession $admin -OutFile $exportPath -UseBasicParsing | Out-Null
 $credentials=Import-Csv $exportPath | Where-Object 用户名 -eq '测试用户' | Select-Object -First 1
 if (-not $credentials.密码 -or $credentials.密码.Length -ne 10) { throw 'Generated user password was not exportable or was not 10 characters.' }
-"PRINTERWLAN_TEST_USER_PASSWORD=$($credentials.密码)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_ENV)) {
+  Write-Host "::add-mask::$($credentials.密码)"
+  "PRINTERWLAN_TEST_USER_PASSWORD=$($credentials.密码)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+}
 
 $user=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $user | Out-Null
