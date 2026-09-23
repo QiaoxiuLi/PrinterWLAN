@@ -78,6 +78,7 @@ function New-TestDocx([string]$Path) {
 
 function Get-Csrf($Session) { return ($Session.Cookies.GetCookies('http://127.0.0.1:8080') | Where-Object Name -eq 'PrinterWLAN-CSRF').Value }
 function Get-Headers($Session) { return @{ 'X-CSRF-Token'=(Get-Csrf $Session); 'X-Device-Id'='00000000-0000-4000-8000-000000000001'; 'X-Session-Id'='smoke-test-session'; 'X-Viewport'='1366x768'; 'X-Screen'='1920x1080'; 'X-Timezone'='UTC' } }
+function ConvertTo-Utf8JsonBytes($Value) { return ,[Text.Encoding]::UTF8.GetBytes(($Value | ConvertTo-Json -Compress)) }
 
 function Invoke-MultipartRestMethod {
   param(
@@ -143,8 +144,8 @@ function Invoke-JsonRequestAllowError {
     Method = 'Post'
     WebSession = $Session
     Headers = $Headers
-    ContentType = 'application/json'
-    Body = $Body
+    ContentType = 'application/json; charset=utf-8'
+    Body = [Text.Encoding]::UTF8.GetBytes($Body)
     UseBasicParsing = $true
   }
   if ((Get-Command Invoke-WebRequest).Parameters.ContainsKey('SkipHttpErrorCheck')) {
@@ -213,7 +214,7 @@ Write-Host "Real non-loopback LAN HTTP target: $lanBaseUrl"
 
 $admin=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $admin | Out-Null
-Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $admin -Headers (Get-Headers $admin) -ContentType 'application/json' -Body (@{password=$AdminPassword}|ConvertTo-Json) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $admin -Headers (Get-Headers $admin) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes @{password=$AdminPassword}) | Out-Null
 $printerState=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $admin
 if ($PrinterMode -eq 'Fake' -and $printerState.printers.Count -ne 2) { throw 'Fake printer inventory was not available to the administrator.' }
 $csvPath=Join-Path $OutputDirectory 'users.csv'; [IO.File]::WriteAllText($csvPath,"用户名`r`n测试用户`r`n",[Text.UTF8Encoding]::new($true))
@@ -229,7 +230,7 @@ if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_ENV)) {
 
 $user=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $user | Out-Null
-Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json' -Body (@{username='测试用户';password=$credentials.密码}|ConvertTo-Json) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes @{username='测试用户';password=$credentials.密码}) | Out-Null
 $pdfPath=Join-Path $OutputDirectory 'sample.pdf';New-TestPdf $pdfPath
 $upload=Invoke-MultipartRestMethod 'http://127.0.0.1:8080/api/user/documents' $user (Get-Headers $user) @{file=Get-Item $pdfPath;clientLastModified='2026-09-15T00:00:00Z'}
 if ($upload.totalPages -ne 1) { throw 'PDF page count smoke test failed.' }
@@ -243,19 +244,19 @@ if ($blockedJob.StatusCode -ne 400 -or $blockedJob.Content -notmatch '暂未配�
 $expectedPrinterName = if ($PrinterMode -eq 'Fake') { 'PrinterWLAN Test Printer A' } else { $testPrinterName }
 $selectedPrinter=$printerState.printers | Where-Object name -eq $expectedPrinterName | Select-Object -First 1
 if (-not $selectedPrinter) { throw "Expected printer was not found: $expectedPrinterName" }
-Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printer' -Method Put -WebSession $admin -Headers (Get-Headers $admin) -ContentType 'application/json' -Body (@{printerId=$selectedPrinter.id}|ConvertTo-Json) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printer' -Method Put -WebSession $admin -Headers (Get-Headers $admin) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes @{printerId=$selectedPrinter.id}) | Out-Null
 Restart-Service PrinterWLAN -Force
 $deadline=(Get-Date).AddMinutes(2)
 do { try { $health=Invoke-RestMethod 'http://127.0.0.1:8080/health' -TimeoutSec 3; break } catch { Start-Sleep -Seconds 2 } } while ((Get-Date) -lt $deadline)
 if ($health.status -ne 'ok') { throw 'Service did not recover after the printer persistence restart test.' }
 $admin=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $admin | Out-Null
-Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $admin -Headers (Get-Headers $admin) -ContentType 'application/json' -Body (@{password=$AdminPassword}|ConvertTo-Json) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $admin -Headers (Get-Headers $admin) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes @{password=$AdminPassword}) | Out-Null
 $persistedPrinter=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $admin
 if ($persistedPrinter.selectedPrinterId -ne $selectedPrinter.id -or $persistedPrinter.selectedPrinterName -ne $selectedPrinter.name) { throw 'Administrator printer selection did not survive a service restart.' }
 $user=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $user | Out-Null
-Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json' -Body (@{username='测试用户';password=$credentials.密码}|ConvertTo-Json) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes @{username='测试用户';password=$credentials.密码}) | Out-Null
 
 $capabilities=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/print-capabilities' -WebSession $user
 if (-not $capabilities.available -or $capabilities.PSObject.Properties.Name -contains 'name' -or $capabilities.PSObject.Properties.Name -contains 'id') { throw 'User capability endpoint exposed an invalid printer state or identity.' }
@@ -274,8 +275,8 @@ $resolution = $capabilities.resolutions | Select-Object -First 1
 $colorMode = if ($capabilities.supportsColor) { 'color' } else { 'grayscale' }
 $sourceName = if ($source) { $source.name } else { $null }
 $resolutionKey = if ($resolution) { "$($resolution.rawKind):$($resolution.x):$($resolution.y)" } else { $null }
-$jobRequest=@{documentId=$upload.id;paperSize=$paper.name;orientation='portrait';duplex='simplex';pageRange='all';copies=1;collate=$false;colorMode=$colorMode;paperSource=$sourceName;resolution=$resolutionKey;scaleMode='fit';scalePercent=100;center=$true}|ConvertTo-Json
-$job=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/jobs' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json' -Body $jobRequest
+$jobRequest=@{documentId=$upload.id;paperSize=$paper.name;orientation='portrait';duplex='simplex';pageRange='all';copies=1;collate=$false;colorMode=$colorMode;paperSource=$sourceName;resolution=$resolutionKey;scaleMode='fit';scalePercent=100;center=$true}
+$job=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/jobs' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes $jobRequest)
 for($i=0;$i -lt 30;$i++){ $status=Invoke-RestMethod "http://127.0.0.1:8080/api/user/jobs/$($job.jobId)" -WebSession $user;if($status.status -eq 'sent'){break};if($status.status -eq 'failed'){throw $status.friendlyError};Start-Sleep -Milliseconds 500 }
 if ($status.status -ne 'sent') { throw "$PrinterMode printer job did not reach sent state." }
 if ($PrinterMode -eq 'SystemPdf') {

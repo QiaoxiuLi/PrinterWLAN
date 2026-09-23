@@ -59,6 +59,7 @@ function Wait-ForHealth {
 
 function Get-Csrf($Session) { return ($Session.Cookies.GetCookies('http://127.0.0.1:8080') | Where-Object Name -eq 'PrinterWLAN-CSRF').Value }
 function Get-Headers($Session) { return @{ 'X-CSRF-Token'=(Get-Csrf $Session); 'X-Device-Id'='00000000-0000-4000-8000-000000000002'; 'X-Session-Id'='upgrade-test-session' } }
+function ConvertTo-Utf8JsonBytes($Value) { return ,[Text.Encoding]::UTF8.GetBytes(($Value | ConvertTo-Json -Compress)) }
 
 $oldInstaller=Join-Path $OutputDirectory 'PrinterWLAN-v1.1.0-Setup-x64.exe'
 Invoke-WebRequest 'https://github.com/QiaoxiuLi/PrinterWLAN/releases/download/v1.1.0/PrinterWLAN-Setup-x64.exe' -OutFile $oldInstaller
@@ -74,8 +75,8 @@ if ($LASTEXITCODE -ne 0) { throw 'v1.1.0 administrator password setup failed.' }
 
 $before=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $before | Out-Null
-Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $before -Headers (Get-Headers $before) -ContentType 'application/json' -Body (@{password=$AdminPassword}|ConvertTo-Json) | Out-Null
-Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/settings' -Method Put -WebSession $before -Headers (Get-Headers $before) -ContentType 'application/json' -Body (@{siteName='PrinterWLAN Upgrade Preserved'}|ConvertTo-Json) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $before -Headers (Get-Headers $before) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes @{password=$AdminPassword}) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/settings' -Method Put -WebSession $before -Headers (Get-Headers $before) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes @{siteName='PrinterWLAN Upgrade Preserved'}) | Out-Null
 $csvPath=Join-Path $OutputDirectory 'upgrade-users.csv'
 [IO.File]::WriteAllText($csvPath,"用户名`r`n升级保留用户`r`n",[Text.UTF8Encoding]::new($true))
 Invoke-MultipartRestMethod 'http://127.0.0.1:8080/api/admin/users/import' $before (Get-Headers $before) @{file=Get-Item $csvPath} | Out-Null
@@ -85,8 +86,8 @@ $beforeCredential=Import-Csv $beforeExport | Where-Object 用户名 -eq '升级�
 if (-not $beforeCredential.密码) { throw 'v1.1.0 user credential could not be exported.' }
 $userBefore=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $userBefore | Out-Null
-Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSession $userBefore -Headers (Get-Headers $userBefore) -ContentType 'application/json' -Body (@{username='升级保留用户';password=$beforeCredential.密码}|ConvertTo-Json) | Out-Null
-Invoke-RestMethod 'http://127.0.0.1:8080/api/events' -Method Post -WebSession $userBefore -Headers (Get-Headers $userBefore) -ContentType 'application/json' -Body (@{type='page_view';page='upgrade-preservation'}|ConvertTo-Json) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSession $userBefore -Headers (Get-Headers $userBefore) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes @{username='升级保留用户';password=$beforeCredential.密码}) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/events' -Method Post -WebSession $userBefore -Headers (Get-Headers $userBefore) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes @{type='page_view';page='upgrade-preservation'}) | Out-Null
 $recordsBefore=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/records?page=1&pageSize=50' -WebSession $before
 if ($recordsBefore.total -lt 1) { throw 'v1.1.0 activity data was not created.' }
 $diagnosticMarker='C:\ProgramData\PrinterWLAN\Diagnostics\upgrade-preservation.txt'
@@ -94,7 +95,7 @@ $diagnosticMarker='C:\ProgramData\PrinterWLAN\Diagnostics\upgrade-preservation.t
 $beforePrinters=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $before
 $selectedPrinter=$beforePrinters.printers | Where-Object name -eq 'PrinterWLAN Test Printer A' | Select-Object -First 1
 if (-not $selectedPrinter) { throw 'v1.1.0 fake printer was unavailable.' }
-Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printer' -Method Put -WebSession $before -Headers (Get-Headers $before) -ContentType 'application/json' -Body (@{printerId=$selectedPrinter.id}|ConvertTo-Json) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printer' -Method Put -WebSession $before -Headers (Get-Headers $before) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes @{printerId=$selectedPrinter.id}) | Out-Null
 
 $upgradeProcess=Start-Process $CurrentInstallerPath -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/FAKEPRINTER') -Wait -PassThru
 if ($upgradeProcess.ExitCode -ne 0) { throw "v1.2.0 in-place installer failed with exit code $($upgradeProcess.ExitCode)." }
@@ -103,7 +104,7 @@ Wait-ForHealth
 $after=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 $bootstrap=Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $after
 if ($bootstrap.siteName -ne 'PrinterWLAN Upgrade Preserved' -or $bootstrap.version -ne '1.2.0') { throw 'Upgrade did not preserve the site name or install v1.2.0.' }
-Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $after -Headers (Get-Headers $after) -ContentType 'application/json' -Body (@{password=$AdminPassword}|ConvertTo-Json) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSession $after -Headers (Get-Headers $after) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes @{password=$AdminPassword}) | Out-Null
 $users=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/users?query=%E5%8D%87%E7%BA%A7%E4%BF%9D%E7%95%99%E7%94%A8%E6%88%B7&page=1&pageSize=50' -WebSession $after
 if ($users.total -ne 1) { throw 'Upgrade did not preserve the existing user.' }
 $afterExport=Join-Path $OutputDirectory 'v1.2-users.csv'
@@ -112,7 +113,7 @@ $afterCredential=Import-Csv $afterExport | Where-Object 用户名 -eq '升级保
 if ($afterCredential.密码 -ne $beforeCredential.密码) { throw 'Upgrade changed the existing user password data.' }
 $userAfter=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $userAfter | Out-Null
-Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSession $userAfter -Headers (Get-Headers $userAfter) -ContentType 'application/json' -Body (@{username='升级保留用户';password=$beforeCredential.密码}|ConvertTo-Json) | Out-Null
+Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSession $userAfter -Headers (Get-Headers $userAfter) -ContentType 'application/json; charset=utf-8' -Body (ConvertTo-Utf8JsonBytes @{username='升级保留用户';password=$beforeCredential.密码}) | Out-Null
 $recordsAfter=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/records?page=1&pageSize=100' -WebSession $after
 if ($recordsAfter.total -lt $recordsBefore.total -or -not ($recordsAfter.items | Where-Object type -eq 'page_view')) { throw 'Upgrade did not preserve Activity database records.' }
 if (-not (Test-Path $diagnosticMarker) -or (Get-Content $diagnosticMarker -Raw) -ne 'preserve diagnostics') { throw 'Upgrade did not preserve Diagnostics data.' }
