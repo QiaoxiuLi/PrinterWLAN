@@ -12,6 +12,12 @@
     <PublishSingleFile>false</PublishSingleFile>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <!--
+      Some supported Windows 10 desktop builds cannot launch CET-compatible
+      .NET apphosts. Keep the Server 2025 build hardened by default and opt out
+      only for the separately gated desktop compatibility candidate.
+    -->
+    <CetCompat Condition="'$(PrinterWlanDesktopCompatibility)' == 'true'">false</CetCompat>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="CsvHelper" Version="33.1.0" />

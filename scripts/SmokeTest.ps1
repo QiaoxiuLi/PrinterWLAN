@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$InstallerPath,
   [string]$OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts/smoke'),
   [string]$AdminPassword = $env:PRINTERWLAN_ADMIN_PASSWORD,
@@ -79,6 +79,95 @@ function New-TestDocx([string]$Path) {
 function Get-Csrf($Session) { return ($Session.Cookies.GetCookies('http://127.0.0.1:8080') | Where-Object Name -eq 'PrinterWLAN-CSRF').Value }
 function Get-Headers($Session) { return @{ 'X-CSRF-Token'=(Get-Csrf $Session); 'X-Device-Id'='00000000-0000-4000-8000-000000000001'; 'X-Session-Id'='smoke-test-session'; 'X-Viewport'='1366x768'; 'X-Screen'='1920x1080'; 'X-Timezone'='UTC' } }
 
+function Invoke-MultipartRestMethod {
+  param(
+    [Parameter(Mandatory=$true)][string]$Uri,
+    [Parameter(Mandatory=$true)]$Session,
+    [Parameter(Mandatory=$true)][hashtable]$Headers,
+    [Parameter(Mandatory=$true)][hashtable]$Form
+  )
+
+  $boundary = '----------------PrinterWLAN' + [Guid]::NewGuid().ToString('N')
+  $body = [IO.MemoryStream]::new()
+  try {
+    foreach ($name in $Form.Keys) {
+      $value = $Form[$name]
+      $prefix = "--$boundary`r`n"
+      if ($value -is [IO.FileInfo]) {
+        $prefix += "Content-Disposition: form-data; name=`"$name`"; filename=`"$($value.Name)`"`r`n"
+        $prefix += "Content-Type: application/octet-stream`r`n`r`n"
+        $prefixBytes = [Text.Encoding]::UTF8.GetBytes($prefix)
+        $body.Write($prefixBytes, 0, $prefixBytes.Length)
+        $file = [IO.File]::OpenRead($value.FullName)
+        try { $file.CopyTo($body) } finally { $file.Dispose() }
+        $lineBreak = [Text.Encoding]::ASCII.GetBytes("`r`n")
+        $body.Write($lineBreak, 0, $lineBreak.Length)
+      } else {
+        $prefix += "Content-Disposition: form-data; name=`"$name`"`r`n`r`n$value`r`n"
+        $prefixBytes = [Text.Encoding]::UTF8.GetBytes($prefix)
+        $body.Write($prefixBytes, 0, $prefixBytes.Length)
+      }
+    }
+    $suffix = [Text.Encoding]::ASCII.GetBytes("--$boundary--`r`n")
+    $body.Write($suffix, 0, $suffix.Length)
+
+    $request = [Net.HttpWebRequest]::Create($Uri)
+    $request.Method = 'POST'
+    $request.ContentType = "multipart/form-data; boundary=$boundary"
+    $request.ContentLength = $body.Length
+    $request.CookieContainer = $Session.Cookies
+    foreach ($name in $Headers.Keys) { $request.Headers[$name] = [string]$Headers[$name] }
+    $requestStream = $request.GetRequestStream()
+    try {
+      $body.Position = 0
+      $body.CopyTo($requestStream)
+    } finally { $requestStream.Dispose() }
+    $response = $request.GetResponse()
+    try {
+      $reader = [IO.StreamReader]::new($response.GetResponseStream(), [Text.Encoding]::UTF8)
+      try { return ($reader.ReadToEnd() | ConvertFrom-Json) } finally { $reader.Dispose() }
+    } finally { $response.Dispose() }
+  } finally { $body.Dispose() }
+}
+
+function Invoke-JsonRequestAllowError {
+  param(
+    [Parameter(Mandatory=$true)][string]$Uri,
+    [Parameter(Mandatory=$true)]$Session,
+    [Parameter(Mandatory=$true)][hashtable]$Headers,
+    [Parameter(Mandatory=$true)][string]$Body
+  )
+
+  $parameters = @{
+    Uri = $Uri
+    Method = 'Post'
+    WebSession = $Session
+    Headers = $Headers
+    ContentType = 'application/json'
+    Body = $Body
+    UseBasicParsing = $true
+  }
+  if ((Get-Command Invoke-WebRequest).Parameters.ContainsKey('SkipHttpErrorCheck')) {
+    return Invoke-WebRequest @parameters -SkipHttpErrorCheck
+  }
+  try {
+    return Invoke-WebRequest @parameters
+  } catch {
+    $response = $_.Exception.Response
+    if (-not $response) { throw }
+    $reader = [IO.StreamReader]::new($response.GetResponseStream(), [Text.Encoding]::UTF8)
+    try {
+      return [pscustomobject]@{
+        StatusCode = [int]$response.StatusCode
+        Content = $reader.ReadToEnd()
+      }
+    } finally {
+      $reader.Dispose()
+      $response.Dispose()
+    }
+  }
+}
+
 try {
 if ($CleanInstall) {
   $existingUninstaller = "$env:ProgramFiles\PrinterWLAN\unins000.exe"
@@ -126,9 +215,9 @@ Invoke-RestMethod 'http://127.0.0.1:8080/api/admin-login' -Method Post -WebSessi
 $printerState=Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/printers' -WebSession $admin
 if ($PrinterMode -eq 'Fake' -and $printerState.printers.Count -ne 2) { throw 'Fake printer inventory was not available to the administrator.' }
 $csvPath=Join-Path $OutputDirectory 'users.csv'; [IO.File]::WriteAllText($csvPath,"用户名`r`n测试用户`r`n",[Text.UTF8Encoding]::new($true))
-Invoke-RestMethod 'http://127.0.0.1:8080/api/admin/users/import' -Method Post -WebSession $admin -Headers (Get-Headers $admin) -Form @{file=Get-Item $csvPath} | Out-Null
+Invoke-MultipartRestMethod 'http://127.0.0.1:8080/api/admin/users/import' $admin (Get-Headers $admin) @{file=Get-Item $csvPath} | Out-Null
 $exportPath=Join-Path $OutputDirectory 'users-export.csv'
-Invoke-WebRequest 'http://127.0.0.1:8080/api/admin/users/export' -WebSession $admin -OutFile $exportPath | Out-Null
+Invoke-WebRequest 'http://127.0.0.1:8080/api/admin/users/export' -WebSession $admin -OutFile $exportPath -UseBasicParsing | Out-Null
 $credentials=Import-Csv $exportPath | Where-Object 用户名 -eq '测试用户' | Select-Object -First 1
 if (-not $credentials.密码 -or $credentials.密码.Length -ne 10) { throw 'Generated user password was not exportable or was not 10 characters.' }
 "PRINTERWLAN_TEST_USER_PASSWORD=$($credentials.密码)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
@@ -137,13 +226,13 @@ $user=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
 Invoke-RestMethod 'http://127.0.0.1:8080/api/bootstrap' -WebSession $user | Out-Null
 Invoke-RestMethod 'http://127.0.0.1:8080/api/user-login' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json' -Body (@{username='测试用户';password=$credentials.密码}|ConvertTo-Json) | Out-Null
 $pdfPath=Join-Path $OutputDirectory 'sample.pdf';New-TestPdf $pdfPath
-$upload=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/documents' -Method Post -WebSession $user -Headers (Get-Headers $user) -Form @{file=Get-Item $pdfPath;clientLastModified='2026-09-15T00:00:00Z'}
+$upload=Invoke-MultipartRestMethod 'http://127.0.0.1:8080/api/user/documents' $user (Get-Headers $user) @{file=Get-Item $pdfPath;clientLastModified='2026-09-15T00:00:00Z'}
 if ($upload.totalPages -ne 1) { throw 'PDF page count smoke test failed.' }
 $unconfigured=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/print-capabilities' -WebSession $user
 if ($unconfigured.configured -or $unconfigured.available) { throw 'A fresh installation unexpectedly selected a printer.' }
-$previewResponse=Invoke-WebRequest "http://127.0.0.1:8080/api/user/documents/$($upload.id)/preview" -WebSession $user
+$previewResponse=Invoke-WebRequest "http://127.0.0.1:8080/api/user/documents/$($upload.id)/preview" -WebSession $user -UseBasicParsing
 if ($previewResponse.StatusCode -ne 200 -or $previewResponse.Headers.'Content-Type' -notmatch 'application/pdf') { throw 'Upload/preview was not available before printer configuration.' }
-$blockedJob=Invoke-WebRequest 'http://127.0.0.1:8080/api/user/jobs' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json' -Body (@{documentId=$upload.id;paperSize='A4'}|ConvertTo-Json) -SkipHttpErrorCheck
+$blockedJob=Invoke-JsonRequestAllowError 'http://127.0.0.1:8080/api/user/jobs' $user (Get-Headers $user) (@{documentId=$upload.id;paperSize='A4'}|ConvertTo-Json)
 if ($blockedJob.StatusCode -ne 400 -or $blockedJob.Content -notmatch '暂未配置打印机') { throw 'Printing was not blocked while no administrator printer was configured.' }
 
 $expectedPrinterName = if ($PrinterMode -eq 'Fake') { 'PrinterWLAN Test Printer A' } else { $testPrinterName }
@@ -169,7 +258,7 @@ foreach ($field in @('printer','printerId','printerName','targetPrinter')) {
   $injectedBody=@{documentId=$upload.id;paperSize='A4'}
   $injectedBody[$field]='PrinterWLAN Test Printer B'
   $injected=$injectedBody|ConvertTo-Json
-  $response=Invoke-WebRequest 'http://127.0.0.1:8080/api/user/jobs' -Method Post -WebSession $user -Headers (Get-Headers $user) -ContentType 'application/json' -Body $injected -SkipHttpErrorCheck
+  $response=Invoke-JsonRequestAllowError 'http://127.0.0.1:8080/api/user/jobs' $user (Get-Headers $user) $injected
   if ($response.StatusCode -ne 400) { throw "Printer identity injection field '$field' was not rejected." }
 }
 $paper = $capabilities.paperSizes | Where-Object name -eq 'A4' | Select-Object -First 1
@@ -239,7 +328,7 @@ if ($PrinterMode -eq 'SystemPdf') {
 }
 
 $docxPath=Join-Path $OutputDirectory '中文 sample.docx';New-TestDocx $docxPath
-$word=Invoke-RestMethod 'http://127.0.0.1:8080/api/user/documents' -Method Post -WebSession $user -Headers (Get-Headers $user) -Form @{file=Get-Item $docxPath;clientLastModified='2026-09-15T00:00:00Z'}
+$word=Invoke-MultipartRestMethod 'http://127.0.0.1:8080/api/user/documents' $user (Get-Headers $user) @{file=Get-Item $docxPath;clientLastModified='2026-09-15T00:00:00Z'}
 if ($word.totalPages -lt 1) { throw 'Word to PDF conversion smoke test failed.' }
 Invoke-RestMethod "http://127.0.0.1:8080/api/user/documents/$($word.id)" -Method Delete -WebSession $user -Headers (Get-Headers $user) | Out-Null
 $tempFiles=@(Get-ChildItem 'C:\ProgramData\PrinterWLAN\Temp' -File -Recurse -ErrorAction SilentlyContinue)

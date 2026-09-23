@@ -1,4 +1,4 @@
-param(
+﻿param(
   [Parameter(Mandatory=$true)][string]$PrinterName
 )
 $ErrorActionPreference = 'Stop'
@@ -12,7 +12,7 @@ try {
   $document.add_PrintPage({
     param($sender, $eventArgs)
     $eventArgs.Graphics.DrawString(
-      'PrinterWLAN Windows 11 native driver control',
+      'PrinterWLAN Windows native driver control',
       [System.Drawing.SystemFonts]::DefaultFont,
       [System.Drawing.Brushes]::Black,
       20,

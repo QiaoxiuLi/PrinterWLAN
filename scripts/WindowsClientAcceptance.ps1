@@ -1,4 +1,4 @@
-param(
+﻿param(
   [Parameter(Mandatory=$true)][string]$InstallerPath,
   [string]$OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts/windows-client-acceptance'),
   [string]$AdminPassword = $env:PRINTERWLAN_ADMIN_PASSWORD

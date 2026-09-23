@@ -19,7 +19,7 @@ jobs:
           dotnet restore PrinterWLAN.slnx --locked-mode
           dotnet build PrinterWLAN.slnx -c Release --no-restore
           dotnet test PrinterWLAN.slnx -c Release --no-build
-          dotnet publish src/PrinterWLAN/PrinterWLAN.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/publish
+          dotnet publish src/PrinterWLAN/PrinterWLAN.csproj -c Release -r win-x64 --self-contained true --no-restore -p:PrinterWlanDesktopCompatibility=true -o artifacts/publish
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\PrinterWLAN.iss
       - uses: actions/upload-artifact@v5
         with:

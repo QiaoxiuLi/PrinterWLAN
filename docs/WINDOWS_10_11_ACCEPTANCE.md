@@ -15,7 +15,11 @@ Windows 10/11 x64 真机不会启用上述 ARM64 特例：必须由 PrinterWLAN 
 在 Windows 10 x64 管理员 PowerShell 中，从仓库根目录运行：
 
 ```powershell
-$password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+$rng=[Security.Cryptography.RandomNumberGenerator]::Create()
+$bytes=New-Object byte[] 24
+$rng.GetBytes($bytes)
+$rng.Dispose()
+$password=[Convert]::ToBase64String($bytes)
 ./scripts/WindowsClientAcceptance.ps1 `
   -InstallerPath ./PrinterWLAN-Setup-x64.exe `
   -AdminPassword $password `
@@ -45,6 +49,8 @@ $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator
 ## Release 门槛
 
 此门槛用于 v1.3.0 或后续 Windows Desktop 正式版本，不阻塞 Windows Server 2025 x64 的 v1.2.0。只有同时满足以下条件，才可以为该 commit 创建桌面正式版 tag：
+
+桌面兼容候选包使用 `PrinterWlanDesktopCompatibility=true` 单独构建。该构建会关闭 .NET apphost 的 CET 兼容标记，以兼容部分无法启动 CET apphost 的 Windows 10 22H2 设备；常规 Server 2025 构建不传入该参数，继续保留 CET 标记。两类构建不得混用，桌面候选包也不得覆盖 v1.2.0 Server 2025 Release 资产。
 
 1. 在 Windows 10 x64 真机执行上述脚本并通过；
 2. 在 Windows 11 x64 真机执行上述脚本并通过；

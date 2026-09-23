@@ -1,4 +1,4 @@
-param(
+﻿param(
   [Parameter(Mandatory=$true)][string]$AdminPassword
 )
 $ErrorActionPreference = 'Stop'
@@ -56,7 +56,7 @@ try {
   $process.StandardInput.Flush()
   if (-not $process.WaitForExit(30000)) { throw 'Management console did not close after the exit command.' }
 } finally {
-  if (-not $process.HasExited) { $process.Kill($true) }
+  if (-not $process.HasExited) { $process.Kill() }
 }
 
 & $executable status
