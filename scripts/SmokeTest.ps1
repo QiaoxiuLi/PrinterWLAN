@@ -205,8 +205,10 @@ $lanIp = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -not
 if (-not $lanIp) { throw 'No non-loopback IPv4 address is available for the LAN HTTP regression test.' }
 $lanBaseUrl = "http://${lanIp}:8080"
 if ((Invoke-RestMethod "$lanBaseUrl/health" -TimeoutSec 10).status -ne 'ok') { throw "LAN health check failed at $lanBaseUrl." }
-"PRINTERWLAN_BASE_URL=$lanBaseUrl" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-"PRINTERWLAN_REQUIRE_LAN_HTTP=1" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_ENV)) {
+  "PRINTERWLAN_BASE_URL=$lanBaseUrl" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+  "PRINTERWLAN_REQUIRE_LAN_HTTP=1" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+}
 Write-Host "Real non-loopback LAN HTTP target: $lanBaseUrl"
 
 $admin=[Microsoft.PowerShell.Commands.WebRequestSession]::new()
