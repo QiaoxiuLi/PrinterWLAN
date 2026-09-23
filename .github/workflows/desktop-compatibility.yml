@@ -1,4 +1,4 @@
-name: Future Windows Desktop Release Gate (v1.3+)
+name: Windows Desktop Release Gate (v1.3.0)
 on:
   workflow_dispatch:
 permissions:
@@ -21,14 +21,19 @@ jobs:
           dotnet test PrinterWLAN.slnx -c Release --no-build
           dotnet publish src/PrinterWLAN/PrinterWLAN.csproj -c Release -r win-x64 --self-contained true --no-restore -p:PrinterWlanDesktopCompatibility=true -o artifacts/publish
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\PrinterWLAN.iss
+          $file='artifacts/installer/PrinterWLAN-Setup-x64.exe'
+          $hash=(Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  PrinterWLAN-Setup-x64.exe" | Set-Content "$file.sha256" -Encoding ascii
       - uses: actions/upload-artifact@v5
         with:
-          name: PrinterWLAN-future-desktop-candidate
-          path: artifacts/installer/PrinterWLAN-Setup-x64.exe
+          name: PrinterWLAN-v1.3.0-desktop-candidate
+          path: |
+            artifacts/installer/PrinterWLAN-Setup-x64.exe
+            artifacts/installer/PrinterWLAN-Setup-x64.exe.sha256
           if-no-files-found: error
 
   windows-11-desktop-compatibility:
-    name: Windows 11 Desktop compatibility
+    name: Windows 11 ARM64 host with x64 application compatibility
     needs: build-desktop-candidate
     runs-on: windows-11-arm
     timeout-minutes: 60
@@ -36,14 +41,21 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
         with:
-          name: PrinterWLAN-future-desktop-candidate
+          name: PrinterWLAN-v1.3.0-desktop-candidate
           path: downloaded-artifact
       - name: Install and validate desktop-native dependencies and print path
         shell: pwsh
         run: |
           $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          Write-Host "::add-mask::$password"
           $installer=(Get-ChildItem downloaded-artifact -Filter PrinterWLAN-Setup-x64.exe -Recurse | Select-Object -First 1).FullName
           ./scripts/WindowsClientAcceptance.ps1 -InstallerPath $installer -AdminPassword $password -OutputDirectory artifacts/windows-11-smoke
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: PrinterWLAN-v1.3.0-windows-11-arm64-host-evidence
+          path: artifacts/windows-11-smoke/compatibility-evidence.json
+          if-no-files-found: warn
       - name: Clean up desktop test instance
         if: always()
         shell: pwsh
@@ -51,7 +63,7 @@ jobs:
           $uninstaller="$env:ProgramFiles\PrinterWLAN\unins000.exe"
           if (Test-Path $uninstaller) { Start-Process $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DELETEDATA') -Wait }
 
-  require-future-desktop-acceptance:
+  require-desktop-acceptance:
     name: Require Windows 10, Windows 11, and physical printer evidence
     needs: windows-11-desktop-compatibility
     runs-on: ubuntu-latest

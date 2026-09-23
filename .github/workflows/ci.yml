@@ -40,7 +40,7 @@ jobs:
           $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
           Write-Host "::add-mask::$password"
           "PRINTERWLAN_ADMIN_PASSWORD=$password" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Upgrade from v1.1.0 without data loss
+      - name: Upgrade from v1.2.0 to v1.3.0 without data loss
         shell: pwsh
         run: ./scripts/UpgradeTest.ps1 -CurrentInstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe
       - name: Windows print-driver smoke test
@@ -77,7 +77,7 @@ jobs:
       - uses: actions/upload-artifact@v5
         if: always()
         with:
-          name: PrinterWLAN-v1.2.0-windows-x64
+          name: PrinterWLAN-v1.3.0-windows-x64
           path: |
             artifacts/installer/PrinterWLAN-Setup-x64.exe
             artifacts/installer/PrinterWLAN-Setup-x64.exe.sha256

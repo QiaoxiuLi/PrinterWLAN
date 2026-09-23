@@ -1,0 +1,143 @@
+name: Release PrinterWLAN v1.3.0 for Windows Desktop
+on:
+  push:
+    tags: ['v1.3.0']
+permissions:
+  contents: write
+jobs:
+  build-and-server-regression:
+    name: Build desktop installer and run Server 2025 regression
+    runs-on: windows-2025
+    timeout-minutes: 120
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.401
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+      - name: Prepare pinned offline dependencies
+        shell: pwsh
+        run: ./scripts/Prepare-ThirdParty.ps1
+      - name: Locked restore, build, test, desktop publish, and installer
+        shell: pwsh
+        run: |
+          dotnet restore PrinterWLAN.slnx --locked-mode
+          dotnet build PrinterWLAN.slnx -c Release --no-restore
+          dotnet test PrinterWLAN.slnx -c Release --no-build --logger "trx;LogFileName=tests.trx"
+          dotnet publish src/PrinterWLAN/PrinterWLAN.csproj -c Release -r win-x64 --self-contained true --no-restore -p:PrinterWlanDesktopCompatibility=true -o artifacts/publish
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\PrinterWLAN.iss
+      - name: Generate ephemeral release-test credential
+        shell: pwsh
+        run: |
+          $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          Write-Host "::add-mask::$password"
+          "PRINTERWLAN_ADMIN_PASSWORD=$password" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Verify v1.2.0 to v1.3.0 in-place upgrade
+        shell: pwsh
+        run: ./scripts/UpgradeTest.ps1 -CurrentInstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe
+      - name: Verify Windows print-driver path
+        shell: pwsh
+        run: ./scripts/SmokeTest.ps1 -InstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe -PrinterMode SystemPdf -OutputDirectory ./artifacts/system-smoke
+      - name: Verify installer, management console, printer policy, and LAN target
+        shell: pwsh
+        run: ./scripts/SmokeTest.ps1 -InstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe
+      - name: Verify non-loopback LAN browser flows
+        shell: pwsh
+        working-directory: tests/PrinterWLAN.UiTests
+        run: |
+          npm ci
+          npx playwright install chromium
+          npm test
+      - name: Verify uninstall preservation and deletion modes
+        shell: pwsh
+        run: ./scripts/UninstallTest.ps1 -InstallerPath ./artifacts/installer/PrinterWLAN-Setup-x64.exe
+      - name: Generate installer checksum
+        shell: pwsh
+        run: |
+          $file='artifacts/installer/PrinterWLAN-Setup-x64.exe'
+          $hash=(Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  PrinterWLAN-Setup-x64.exe" | Set-Content "$file.sha256" -Encoding ascii
+      - uses: actions/upload-artifact@v5
+        with:
+          name: PrinterWLAN-v1.3.0-desktop-release-candidate
+          path: |
+            artifacts/installer/PrinterWLAN-Setup-x64.exe
+            artifacts/installer/PrinterWLAN-Setup-x64.exe.sha256
+            **/TestResults/*.trx
+            tests/PrinterWLAN.UiTests/playwright-report/
+            artifacts/system-smoke/
+          if-no-files-found: error
+
+  windows-11-arm64-supplemental:
+    name: Windows 11 ARM64 host with x64 application compatibility
+    needs: build-and-server-regression
+    runs-on: windows-11-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: PrinterWLAN-v1.3.0-desktop-release-candidate
+          path: downloaded-artifact
+      - name: Install and validate desktop-native dependencies and print path
+        shell: pwsh
+        run: |
+          $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          Write-Host "::add-mask::$password"
+          $installer=(Get-ChildItem downloaded-artifact -Filter PrinterWLAN-Setup-x64.exe -Recurse | Select-Object -First 1).FullName
+          ./scripts/WindowsClientAcceptance.ps1 -InstallerPath $installer -AdminPassword $password -OutputDirectory artifacts/windows-11-smoke
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: PrinterWLAN-v1.3.0-windows-11-arm64-host-evidence
+          path: artifacts/windows-11-smoke/compatibility-evidence.json
+          if-no-files-found: warn
+      - name: Clean up desktop test instance
+        if: always()
+        shell: pwsh
+        run: |
+          $uninstaller="$env:ProgramFiles\PrinterWLAN\unins000.exe"
+          if (Test-Path $uninstaller) { Start-Process $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DELETEDATA') -Wait }
+
+  require-desktop-evidence:
+    name: Require same-commit Windows 10 x64, Windows 11 x64, and physical printer evidence
+    needs: [build-and-server-regression, windows-11-arm64-supplemental]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check acceptance commit pins
+        env:
+          EXPECTED: ${{ github.sha }}
+          WINDOWS10: ${{ vars.PRINTERWLAN_WINDOWS10_VALIDATED_COMMIT }}
+          WINDOWS11: ${{ vars.PRINTERWLAN_WINDOWS11_VALIDATED_COMMIT }}
+          PHYSICAL: ${{ vars.PRINTERWLAN_PHYSICAL_PRINTER_VALIDATED_COMMIT }}
+        run: |
+          test "$WINDOWS10" = "$EXPECTED" || { echo 'Windows 10 x64 evidence is missing for this commit.'; exit 1; }
+          test "$WINDOWS11" = "$EXPECTED" || { echo 'Windows 11 x64 evidence is missing for this commit.'; exit 1; }
+          test "$PHYSICAL" = "$EXPECTED" || { echo 'Physical-printer evidence is missing for this commit.'; exit 1; }
+
+  publish-release:
+    name: Publish non-draft, non-prerelease GitHub Release
+    needs: require-desktop-evidence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: PrinterWLAN-v1.3.0-desktop-release-candidate
+          path: artifacts/release
+      - name: Create immutable-tag release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          installer=$(find artifacts/release -name PrinterWLAN-Setup-x64.exe -type f -print -quit)
+          checksum=$(find artifacts/release -name PrinterWLAN-Setup-x64.exe.sha256 -type f -print -quit)
+          gh release create '${{ github.ref_name }}' \
+            "$installer" \
+            "$checksum" \
+            'output/pdf/PrinterWLAN-v1.3.0-User-Guide-zh-CN.pdf' \
+            --verify-tag --latest --title 'PrinterWLAN v1.3.0' \
+            --notes-file docs/RELEASE_NOTES_v1.3.0.md
