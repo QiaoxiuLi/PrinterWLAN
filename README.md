@@ -1,42 +1,129 @@
 # PrinterWLAN
 
-PrinterWLAN 是面向受信任局域网的 Windows 网页打印服务器。v1.3.0 支持 **Windows Server 2025 x64、Windows 10 22H2 x64、Windows 11 x64，以及 Windows 11 ARM64 主机中的 x64 应用兼容模式**。手机、平板和电脑只需打开浏览器、登录、上传 PDF 或 Word 文件，即可调用主机中已经安装好的 Windows 打印机及其驱动完成打印。
+PrinterWLAN 是一款运行在 Windows 电脑或服务器上的局域网网页打印软件。
 
-正式安装包是自包含的：包含 .NET 10 运行时、PDF.js、PDFium/SkiaSharp、独立的 LibreOffice Windows x64 运行时，以及原生组件所需的 Microsoft Visual C++ v14 运行库。目标电脑不需要自行安装 .NET、Visual C++ Runtime、Node.js、Python、Java、Microsoft Office 或 LibreOffice；安装完成后的运行也不依赖互联网、CDN、云服务或外部 API。
+管理员只需要在一台 Windows 主机上安装 PrinterWLAN、添加用户并指定打印机，同一局域网内的手机、平板和电脑便可以通过浏览器上传 PDF 或 Word 文件并提交打印。普通用户不需要安装客户端，也不需要了解打印机的网络地址或驱动设置。
 
-## 支持的 Windows
+当前正式版本：**v1.3.0**
 
-| 系统 | 支持范围 |
+- [下载 PrinterWLAN v1.3.0](https://github.com/QiaoxiuLi/PrinterWLAN/releases/tag/v1.3.0)
+- [直接下载安装程序](https://github.com/QiaoxiuLi/PrinterWLAN/releases/download/v1.3.0/PrinterWLAN-Setup-x64.exe)
+- [查看安装程序 SHA-256](https://github.com/QiaoxiuLi/PrinterWLAN/releases/download/v1.3.0/PrinterWLAN-Setup-x64.exe.sha256)
+- [下载普通用户中文使用说明](https://github.com/QiaoxiuLi/PrinterWLAN/releases/download/v1.3.0/PrinterWLAN-v1.3.0-User-Guide-zh-CN.pdf)
+
+## 主要功能
+
+- 手机、平板和电脑均可通过浏览器使用，无需安装客户端。
+- 支持上传和打印 PDF、DOC、DOCX 文件。
+- Word 文件会自动转换为 PDF，无需安装 Microsoft Office。
+- 管理员统一指定所有用户使用的打印机，普通用户不需要选择打印机。
+- 根据当前打印机驱动自动提供纸张、方向、单双面、彩色、纸盒、分辨率、份数、页码范围、缩放和居中等选项。
+- 支持创建、导入、导出和管理用户账号。
+- 支持查看访问、登录、上传和打印记录。
+- 作为 Windows Service 自动运行，Windows 重启后可以自动恢复服务。
+- 软件运行所需组件已经包含在安装包中，日常使用不依赖互联网或云服务。
+
+## 支持的系统
+
+| Windows 系统 | 支持方式 |
 |---|---|
-| Windows Server 2025 x64 | v1.3.0 在 `windows-2025` 执行完整构建、升级、浏览器、打印驱动和卸载回归 |
-| Windows 10 22H2 x64 | v1.3.0 在 19045.2965 x64 真机完成无额外依赖、服务、LAN、PDF/Word 与 Windows PDF 驱动测试 |
-| Windows 11 x64 | v1.3.0 在 25H2 build 26200 x64 真机完成与 Windows 10 同级别验收 |
-| Windows 11 ARM64 主机运行 x64 应用 | v1.3.0 在 GitHub ARM64 托管机验证安装、服务、原生组件、PDF/Word 和 Windows 打印链路 |
-| 其他 Windows Server 版本 | 未纳入 v1.2.0 正式验收范围 |
+| Windows Server 2025 x64 | 支持 |
+| Windows 10 22H2 x64 | 支持 |
+| Windows 11 x64 | 支持 |
+| Windows 11 ARM64 | 通过 Windows 自带的 x64 应用兼容功能运行 |
 
-打印机厂商驱动不属于 PrinterWLAN，必须先在 Windows 主机中安装；USB、本地 TCP/IP 或共享打印机应安装为系统打印队列，使 `LocalSystem` 服务可以访问。
+PrinterWLAN 安装程序已经包含 .NET 运行环境、LibreOffice 文档转换组件、PDF 处理组件和所需的 Microsoft Visual C++ 运行组件。目标电脑不需要另外安装 .NET、LibreOffice、Microsoft Office、Node.js、Python 或 Java。
 
-## 安装与首次启动
+PrinterWLAN 不包含打印机厂商驱动。使用前，请先在 Windows 主机中正确安装目标打印机及其 Windows x64 驱动，并确认该打印机可以在 Windows 中正常使用。
 
-1. 从 [GitHub Releases](https://github.com/QiaoxiuLi/PrinterWLAN/releases) 下载 `PrinterWLAN-Setup-x64.exe` 和对应的 `.sha256` 文件。
-2. 在受支持的 Windows 主机上以管理员身份运行安装程序。Windows 10、Windows 11 x64 和 Windows Server 2025 使用 x64 原生运行；Windows 11 ARM64 通过系统的 x64 应用兼容层运行。
-3. 安装程序会离线配置全部随包运行组件，创建依赖 Windows Print Spooler 的 `PrinterWLAN` 延迟自动启动服务、TCP 8080 入站防火墙规则、系统 PATH、开始菜单入口，以及管理员登录桌面时打开的管理 CMD 任务。
-4. 在自动打开的管理窗口中设置管理员密码：
+## 使用方式
 
-   ```cmd
-   printerwlan pwd "请使用至少8个字符的密码"
-   ```
+PrinterWLAN 包含两种使用角色：管理员和普通用户。
 
-5. 在同一网络的设备打开 `http://服务器IP:8080`，通过右下角“管理员登录”进入后台，在“打印机设置”中选择所有用户统一使用的打印机。
-6. 运行 `printerwlan doctor` 检查 Windows 版本、内置原生组件、数据目录、Print Spooler 和打印机；运行 `printerwlan status` 查看服务、端口和局域网地址。
+### 管理员
 
-Windows 中必须预先安装目标打印机及其 x64 驱动，并确保 `LocalSystem` 服务上下文可以访问该打印机。PrinterWLAN 不包含厂商打印机驱动。
+管理员负责：
 
-## 用户与打印流程
+- 设置管理员密码；
+- 创建或导入普通用户；
+- 统一选择 PrinterWLAN 当前使用的打印机；
+- 查看打印机状态和驱动支持的打印选项；
+- 查看、筛选和导出使用记录；
+- 修改网站显示名称；
+- 检查服务运行状态。
 
-网站首页是用户登录页，没有自助注册。右下角的浅色“管理员登录”入口进入管理后台，管理员账号没有用户名。
+管理员选择的打印机会保存在服务器中，Windows 或 PrinterWLAN 服务重启后仍然有效。如果该打印机被删除、改名或处于不可用状态，系统不会自动切换到另一台打印机，管理员需要重新选择。
 
-管理员在“用户设置”中导入只有一列的 UTF-8 CSV：
+### 普通用户
+
+普通用户只需要：
+
+1. 在浏览器中打开 PrinterWLAN 地址；
+2. 输入管理员分配的用户名和密码；
+3. 上传 PDF、DOC 或 DOCX 文件；
+4. 预览文件并设置纸张、页码、份数、单双面、彩色等选项；
+5. 提交打印。
+
+普通用户看不到 Windows 打印机列表，也不能自行更换打印机。所有任务都会使用管理员当前指定的打印机。
+
+## 安装与首次配置
+
+### 1. 准备 Windows 主机
+
+在准备安装 PrinterWLAN 的电脑上：
+
+- 安装目标打印机及其 Windows 驱动；
+- 使用 Windows 自带功能确认打印机可以正常打印；
+- 确保 Windows Print Spooler 服务没有被禁用；
+- 确保需要使用 PrinterWLAN 的设备与该电脑处于同一可信局域网或 VPN。
+
+### 2. 安装 PrinterWLAN
+
+从 [GitHub Releases](https://github.com/QiaoxiuLi/PrinterWLAN/releases) 下载 `PrinterWLAN-Setup-x64.exe`，然后以管理员身份运行。
+
+安装程序会自动：
+
+- 安装 PrinterWLAN 程序和随包运行组件；
+- 创建 PrinterWLAN Windows Service；
+- 配置服务随 Windows 延迟自动启动；
+- 配置 TCP 8080 入站防火墙规则；
+- 添加开始菜单中的管理控制台和卸载入口。
+
+### 3. 设置管理员密码
+
+安装完成后会打开 PrinterWLAN 管理控制台。在窗口中输入：
+
+```cmd
+printerwlan pwd "请设置至少8个字符的密码"
+```
+
+管理员账号不需要用户名，只需要管理员密码。
+
+### 4. 打开管理后台
+
+在 Windows 主机或同一局域网中的设备上打开：
+
+```text
+http://服务器IP:8080
+```
+
+在网页右下角选择“管理员登录”，输入刚才设置的管理员密码。
+
+如果不知道服务器 IP，可以在管理控制台中运行：
+
+```cmd
+printerwlan status
+```
+
+### 5. 选择打印机
+
+进入管理后台的“打印机设置”，从 Windows 已安装的打印机中选择一台作为 PrinterWLAN 当前打印机。
+
+在管理员完成选择前，普通用户可以上传和预览文件，但不能提交打印。
+
+### 6. 添加用户
+
+管理员可以在“用户设置”中添加或批量导入用户。CSV 文件可以使用以下格式：
 
 ```csv
 用户名
@@ -45,56 +132,47 @@ Windows 中必须预先安装目标打印机及其 x64 驱动，并确保 `Local
 John Smith
 ```
 
-表头可以是 `username`、`用户名`，也可以完全没有表头。每个新用户会得到一个由加密安全随机数生成器产生的 10 位密码；管理员可按需显示、复制或导出当前密码。重复导入已有用户名会立即重新生成密码，但永久保留原 `sequence` 位置。用户列表和凭据导出始终严格按首次导入顺序排列。
+系统会为新用户生成密码。管理员可以显示、复制或导出用户凭据，再将用户名和密码分别交给对应用户。
 
-管理员在“打印机设置”中看到 Windows 当前安装的打印机、状态和 Windows 默认标记，并为 PrinterWLAN 选择唯一的当前打印机。该选择保存在服务端，服务或服务器重启后仍然有效。首次升级到 v1.1.0 时不会静默选择 Windows 默认打印机，管理员必须明确选择；如果已选打印机被删除、改名或离线，系统不会自动改用其他打印机。
+## 打印文件与选项
 
-用户登录后可拖放或选择 `.pdf`、`.doc`、`.docx` 文件。用户端不显示打印机名称、打印机列表或选择器，也不能通过 API 指定打印机；所有新任务在提交时绑定管理员当时选定的打印机。管理员之后切换打印机不会改写已经排队的任务。未配置或当前打印机不可用时，用户仍可上传和预览，但不能提交打印。
+支持的文件类型：
 
-Word 文件由随安装包提供的 LibreOffice 独立进程转换为临时 PDF，PDF 与 Word 都通过本地 PDF.js 预览，并通过同一 PDFium/Windows PrintDocument 管线打印。用户可用的设置由管理员所选打印机的驱动实时提供，包括纸张、方向、单双面、页码范围、份数、逐份、彩色、纸盒、分辨率、缩放和居中；不支持的能力会隐藏或禁用。提交时和实际发送前，服务端都会重新验证打印机身份、状态和驱动能力。
+- `.pdf`
+- `.doc`
+- `.docx`
 
-每位用户滚动 60 秒内最多创建一个任务。所选页数乘以份数不得超过 20；100 页文档仍可上传和预览，只需分多次打印。网页中的“已发送到打印机”表示 Windows 打印调用已接受任务，不表示纸张已经物理输出。
+Word 文件会通过安装包内置的 LibreOffice 转换为 PDF，再进行预览和打印。
 
-## 文件与日志数据
+网页显示的打印选项来自管理员当前选择的打印机驱动。不同打印机支持的功能可能不同；驱动不支持的选项会被隐藏或禁用。
 
-上传文件只保存在随机 UUID 临时目录中，用于转换、预览和打印。任务成功、失败或取消后会尽快删除；无人继续操作的文件最多约 60 分钟，后台维护和服务启动时会清理过期残留。文件正文不会写入数据库、日志、导出或缓存。
+默认使用限制：
+
+- 单个上传文件最大 100 MB；
+- 每位用户在滚动 60 秒内最多创建一个打印任务；
+- 单次任务的“所选页数 × 份数”不能超过 20；
+- 页数较多的文件可以上传和预览，但可能需要分多次提交打印。
+
+网页提示“已发送到打印机”表示 Windows 已经接受打印任务，不等同于纸张已经实际输出。实体打印机的缺纸、卡纸、离线、耗材不足等状态仍需在打印机或 Windows 打印队列中检查。
+
+## 数据与文件
+
+上传的文件只用于转换、预览和打印，并保存在随机临时目录中。任务完成、失败或取消后，系统会尽快清理相关临时文件；长时间无人继续操作的文件也会自动清理。
 
 默认数据位置：
 
-| 内容 | 目录 |
+| 内容 | Windows 目录 |
 |---|---|
-| 业务数据库、用户和设置 | `C:\ProgramData\PrinterWLAN\Data` |
-| 临时上传、转换和短期导出 | `C:\ProgramData\PrinterWLAN\Temp` |
-| 使用记录与打印记录 | `C:\ProgramData\PrinterWLAN\Logs` |
-| 程序诊断日志 | `C:\ProgramData\PrinterWLAN\Diagnostics` |
-| 历史日志查询缓存 | `C:\ProgramData\PrinterWLAN\Cache` |
+| 用户、设置和业务数据 | `C:\ProgramData\PrinterWLAN\Data` |
+| 临时上传和转换文件 | `C:\ProgramData\PrinterWLAN\Temp` |
+| 使用与打印记录 | `C:\ProgramData\PrinterWLAN\Logs` |
+| 程序诊断信息 | `C:\ProgramData\PrinterWLAN\Diagnostics` |
 
-业务库与行为日志库分离。行为日志按服务器本地日期每 10 个自然日切片；已结束切片在 SQLite checkpoint、VACUUM、完整性检查后压缩成 ZIP，历史查询时临时只读解压。日志目录硬上限 40 GB，超过上限时只从最旧的、已成功压缩的切片开始删除，直到约 38 GB；当前写入切片不会被容量清理删除。
-
-管理员可以筛选和分页查看访问、登录、上传、预览、打印及失败记录，按切片导出包含 UTF-8 BOM CSV 和 `manifest.json` 的 ZIP。“清空日志”必须重新验证管理员密码，只清除使用/打印记录与查询缓存，不会删除用户、密码、网站名称或管理员凭据。Serilog 诊断日志单独滚动保留 14 天，不显示在使用记录页面。
-
-## 配置
-
-默认监听所有网卡的纯 HTTP 端口 8080：
-
-```json
-{
-  "PrinterWLAN": {
-    "Port": 8080,
-    "MaxUploadBytes": 104857600,
-    "TempRetentionMinutes": 60,
-    "WordConversionTimeoutSeconds": 60,
-    "LogMaxBytes": 42949672960,
-    "LogCleanupTargetBytes": 40802189312
-  }
-}
-```
-
-修改 `C:\Program Files\PrinterWLAN\appsettings.json` 后重启服务使端口和容量配置生效。修改端口时还需由服务器管理员同步调整 Windows Firewall 入站规则。网页显示名称在管理后台修改后立即生效，不会更改服务名和可执行文件名。
-
-PrinterWLAN 有意只提供 HTTP，适合隔离、可信的 LAN/VPN。HTTP 不会对网络中的登录密码和文件传输提供 TLS 加密；不要把 8080 端口直接暴露到互联网。若组织需要 TLS，应在可信网络边界部署由组织管理的反向代理，本程序不会自动创建证书或强制 HTTPS。
+文件正文不会写入用户数据库或使用记录导出文件。
 
 ## 管理命令
+
+在 PrinterWLAN 管理控制台中可以使用以下命令：
 
 ```cmd
 printerwlan status
@@ -102,50 +180,73 @@ printerwlan doctor
 printerwlan pwd "新的管理员密码"
 ```
 
-`doctor` 在本机逐项检查操作系统、PDF.js、LibreOffice、SQLite、PDFium、SkiaSharp、数据目录、Print Spooler 和打印机可见性；缺少打印机是可后续处理的提示，缺少运行组件或 Spooler 则返回失败。`status` 显示服务状态、HTTP 端口、局域网地址、打印机数量和版本。`pwd` 直接更新业务数据库中的管理员 password hash，无需重启服务，密码本身不会写入日志。
+- `status`：显示服务状态、端口、局域网访问地址、打印机数量和软件版本。
+- `doctor`：检查 Windows、内置组件、数据目录、Print Spooler 和打印机是否可用。
+- `pwd`：修改管理员密码，修改后立即生效。
+
+## 局域网与安全提示
+
+PrinterWLAN 默认使用 HTTP 端口 `8080`，适合部署在家庭、办公室、学校或其他受信任的局域网/VPN 中。
+
+HTTP 不会加密登录密码和上传文件，因此：
+
+- 不要把 PrinterWLAN 的 `8080` 端口直接暴露到互联网；
+- 不要在不受信任的公共网络中使用；
+- 需要通过互联网访问时，应由网络管理员配置 VPN 或带 HTTPS 的反向代理；
+- 请为管理员和普通用户设置不容易猜测的密码。
+
+## 常见问题
+
+### 网页打不开
+
+请确认：
+
+- Windows 主机已经开机并连接网络；
+- 访问设备与 Windows 主机位于同一局域网或 VPN；
+- 地址使用了正确的服务器 IP 和端口，例如 `http://192.168.1.20:8080`；
+- `printerwlan status` 显示服务和网站状态正常；
+- Windows 防火墙没有删除或阻止 PrinterWLAN 的入站规则。
+
+### 用户不能提交打印
+
+常见原因包括：
+
+- 管理员尚未在“打印机设置”中选择打印机；
+- 已选择的打印机被删除、改名或离线；
+- Windows Print Spooler 没有运行；
+- 当前设置不受打印机驱动支持；
+- 用户在 60 秒内已经提交过任务；
+- 本次打印页数乘以份数超过 20。
+
+管理员可以运行 `printerwlan doctor` 检查本机环境。
+
+### 是否需要安装 Microsoft Office 或 LibreOffice
+
+不需要。PrinterWLAN 安装包已经包含用于 Word 转换的独立 LibreOffice 运行组件。
+
+### 是否支持手机和平板
+
+支持。设备只需要能够访问 Windows 主机的局域网地址，并使用现代浏览器打开 PrinterWLAN 网页。
+
+### 是否支持 Windows 11 ARM64
+
+支持。PrinterWLAN x64 安装包通过 Windows 11 自带的 x64 应用兼容功能运行，不需要另装模拟器。
+
+### 能否让不同用户选择不同打印机
+
+不能。PrinterWLAN 采用管理员统一打印机模式，所有普通用户使用管理员当前指定的打印机。
 
 ## 卸载
 
-从 Windows“已安装的应用”或开始菜单运行卸载程序。卸载会停止并删除 Windows Service、防火墙规则和登录计划任务。卸载程序会询问是否保留 `C:\ProgramData\PrinterWLAN`；默认建议保留，以便以后重新安装继续使用。选择完全删除会永久移除用户配置和日志。
+可以从 Windows“已安装的应用”或开始菜单运行“卸载 PrinterWLAN”。
 
-## 从源码构建
+卸载时可以选择：
 
-开发/构建依赖：.NET 10 SDK `10.0.401`、PowerShell 7、Inno Setup 6，以及只用于 Playwright 测试的 Node.js（目标服务器不需要）。
+- 保留 `C:\ProgramData\PrinterWLAN`，以后重新安装时继续使用现有用户和设置；
+- 完全删除数据，永久移除用户、设置和日志。
 
-```powershell
-git clone https://github.com/QiaoxiuLi/PrinterWLAN.git
-cd PrinterWLAN
-./scripts/Prepare-ThirdParty.ps1
-dotnet restore PrinterWLAN.slnx --locked-mode
-dotnet build PrinterWLAN.slnx -c Release --no-restore
-dotnet test PrinterWLAN.slnx -c Release --no-build
-dotnet publish src/PrinterWLAN/PrinterWLAN.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/publish
-& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\PrinterWLAN.iss
-```
+如果以后仍可能重新安装，建议选择保留数据。选择完全删除后，相关数据无法通过 PrinterWLAN 恢复。
 
-`Prepare-ThirdParty.ps1` 从 [`third-party/manifests/dependencies.json`](third-party/manifests/dependencies.json) 读取固定 URL 和 SHA-256，校验后准备 PDF.js、LibreOffice 和 Microsoft Visual C++ v14 运行库。哈希不匹配会立即终止构建。大型第三方二进制、`bin`、`obj`、运行数据库、日志和安装产物均不提交到 Git。
+## 许可与第三方组件
 
-## GitHub Actions
-
-`Windows Server 2025 CI` 在 `windows-2025` 执行 locked restore、Release build、单元/集成测试、`win-x64` self-contained publish、固定第三方依赖及 SHA-256 校验、Inno Setup 编译、v1.2.0 → v1.3.0 原地升级、真实 Windows PDF 打印驱动、Fake printer、管理控制台、服务恢复策略、非 loopback 局域网 HTTP、Playwright 多 viewport、数据保留/删除卸载和安装包校验。
-
-`Release PrinterWLAN v1.2.0 for Windows Server 2025` 是保留的历史发布工作流，只接受固定的 `v1.2.0` tag。v1.3.0 使用独立的桌面正式发布工作流，不会改写 v1.2.0 的 tag 或资产。
-
-v1.3.0 的 `Windows Desktop Release Gate (v1.3.0)`、[`scripts/WindowsClientAcceptance.ps1`](scripts/WindowsClientAcceptance.ps1) 和正式发布工作流共同验证四个平台：Windows Server 2025、Windows 10 x64、Windows 11 x64，以及 Windows 11 ARM64 主机运行 x64 应用。桌面安装包使用 CET 兼容构建，不改变 v1.2.0 Server 2025 资产。Windows 10/11 x64 真机证据必须固定到准备发布的同一 commit；Server 2025 和 ARM64-host 验收则由该 commit/tag 的工作流现场执行。实体打印机型号、纸盒和耗材行为仍建议部署现场检查，但不作为 v1.3.0 GitHub Release 的自动门禁。
-
-## 项目结构
-
-```text
-src/PrinterWLAN/                     ASP.NET Core、服务、打印、文档、存储与网页
-tests/PrinterWLAN.Tests/             单元与数据库行为测试
-tests/PrinterWLAN.IntegrationTests/  HTTP/权限集成测试
-tests/PrinterWLAN.UiTests/           Playwright 响应式与主要流程测试
-installer/                           Inno Setup 与管理 CMD
-scripts/                             第三方准备和安装包 Smoke Test
-third-party/manifests/               可复现依赖版本、URL、SHA-256
-docs/                                验收清单与 Release Notes
-```
-
-## 第三方组件与许可
-
-本项目自身使用 [MIT License](LICENSE)。第三方组件、版本和许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。构建过程会把来自固定发行包的权威 License/Notice 文本加入安装内容，LibreOffice 作为未修改的独立程序分发和调用。
+PrinterWLAN 使用 [MIT License](LICENSE)。随软件分发的第三方组件及其许可信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
