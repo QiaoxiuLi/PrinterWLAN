@@ -36,10 +36,30 @@ function Install-SystemPdfPrinter {
 }
 
 function Remove-SystemPdfPrinter {
-  Get-Printer -Name $testPrinterName -ErrorAction SilentlyContinue | Remove-Printer -ErrorAction SilentlyContinue
-  Get-Printer -Name $nativeTestPrinterName -ErrorAction SilentlyContinue | Remove-Printer -ErrorAction SilentlyContinue
-  Get-PrinterPort -Name $driverOutputPath -ErrorAction SilentlyContinue | Remove-PrinterPort -ErrorAction SilentlyContinue
-  Get-PrinterPort -Name $nativeDriverOutputPath -ErrorAction SilentlyContinue | Remove-PrinterPort -ErrorAction SilentlyContinue
+  foreach ($printerName in @($testPrinterName, $nativeTestPrinterName)) {
+    Get-PrintJob -PrinterName $printerName -ErrorAction SilentlyContinue |
+      Remove-PrintJob -ErrorAction SilentlyContinue
+    Get-Printer -Name $printerName -ErrorAction SilentlyContinue |
+      Remove-Printer -ErrorAction SilentlyContinue
+  }
+
+  $testPorts = @($driverOutputPath, $nativeDriverOutputPath)
+  $portCleanupDeadline = (Get-Date).AddSeconds(15)
+  do {
+    foreach ($portName in $testPorts) {
+      Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue |
+        Remove-PrinterPort -ErrorAction SilentlyContinue
+    }
+    $remainingPorts = @($testPorts | Where-Object {
+      Get-PrinterPort -Name $_ -ErrorAction SilentlyContinue
+    })
+    if ($remainingPorts.Count -eq 0) { break }
+    Start-Sleep -Milliseconds 250
+  } while ((Get-Date) -lt $portCleanupDeadline)
+
+  if ($remainingPorts.Count -gt 0) {
+    throw "Temporary Windows print ports were not removed: $($remainingPorts -join '; ')."
+  }
 }
 
 function New-TestPdf([string]$Path) {

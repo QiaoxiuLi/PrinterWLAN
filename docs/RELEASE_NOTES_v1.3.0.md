@@ -10,6 +10,7 @@ PrinterWLAN v1.3.0 是面向 Windows 10/11 x64 桌面主机的兼容版本，同
 - 所有包含中文用户名的 JSON 请求明确使用 UTF-8，避免 Windows PowerShell 5.1 默认编码造成登录失败。
 - 管理控制台在 Windows 10 启动时切换到 UTF-8 代码页，中文提示可正确显示；测试读取 `.cmd` 时也显式使用 UTF-8。
 - GitHub 专用环境文件只在 GitHub Actions 内写入，普通 Windows 10 真机运行验收脚本不会因路径为空而失败；动态测试密码会在 Actions 日志中先行掩码。
+- 卸载会等待管理控制台和 Windows Service 进程真正退出，并在标准文件清单删除后再次清理程序目录，避免 Windows 11 上偶发留下已卸载的运行库文件。
 
 ## 管理员统一打印机
 

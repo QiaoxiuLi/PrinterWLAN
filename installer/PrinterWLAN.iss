@@ -71,6 +71,9 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile
 Filename: "{sys}\sc.exe"; Parameters: "delete PrinterWLAN"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteService"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""PrinterWLAN HTTP 8080"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewall"
 
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
+
 [Code]
 function HasCommandLineParameter(const Name: String): Boolean;
 var I: Integer;
