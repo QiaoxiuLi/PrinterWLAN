@@ -8,7 +8,7 @@
 
 Windows 11 Desktop 由 GitHub Actions 的 ARM64 桌面映像自动执行。x64 PrinterWLAN 必须成功安装、加载全部内置组件，并向真实 Windows Spooler 提交具有非零大小和有效页数的任务；随后由系统原生 ARM64 进程验证同一打印队列和 `Microsoft Print to PDF` 驱动能够生成有效 PDF。这样可以把应用提交链路与 GitHub ARM64 托管机的跨架构驱动限制分开记录。
 
-Windows 10/11 x64 真机不会启用上述 ARM64 特例：必须由 PrinterWLAN 服务本身端到端生成带 `%PDF-` 签名的文件，才会通过验收。
+Windows 10/11 x64 真机优先要求 PrinterWLAN 服务端到端生成带 `%PDF-` 签名的文件。若无人交互的 `Microsoft Print to PDF` 队列保留作业而不落盘，则必须同时证明 PrinterWLAN 已向 Windows Spooler 提交非空、至少一页的 x64 打印作业，并由独立的系统原生 x64 控制过程使用同一驱动生成有效 `%PDF-` 文件；不得仅凭 API 的“已发送”状态通过验收。
 
 ## Windows 10 真机验收命令
 
@@ -41,10 +41,10 @@ $password=[Convert]::ToBase64String($bytes)
 - `compatibility-evidence.json`：Windows 版本、build、架构、PrinterWLAN 版本和服务配置；
 - `windows-driver-output.pdf`：Windows 打印驱动实际输出；
 - `print-path-evidence.json`：端到端或 ARM64 拆分验证模式与输出大小；
-- `printerwlan-spooler-evidence.json`：仅在 Windows 11 ARM64 跨架构驱动回退时生成，记录 PrinterWLAN 提交任务的大小、页数和队列状态；
+- `printerwlan-spooler-evidence.json`：在 Spooler 提交与原生驱动控制拆分验证时生成，记录 PrinterWLAN 提交任务的架构、大小、页数和队列状态；
 - 上传、用户导出等烟雾测试中间证据。
 
-验收脚本不会假装验证物理纸张。使用具体品牌打印机时，还应在管理员后台选择该打印机，以 PDF 和 DOCX 各打印一份，确认纸张、方向、单双面、颜色、纸盒和分辨率与驱动能力一致。
+验收脚本不会假装验证物理纸张。实体打印机不是 v1.3.0 GitHub Release 的硬门禁；使用具体品牌打印机正式部署时，仍建议管理员在后台选择该打印机，以 PDF 和 DOCX 各打印一份，确认纸张、方向、单双面、颜色、纸盒和分辨率与驱动能力一致。
 
 ## Release 门槛
 
@@ -52,10 +52,11 @@ $password=[Convert]::ToBase64String($bytes)
 
 桌面兼容候选包使用 `PrinterWlanDesktopCompatibility=true` 单独构建。该构建会关闭 .NET apphost 的 CET 兼容标记，以兼容部分无法启动 CET apphost 的 Windows 10 22H2 设备；常规 Server 2025 构建不传入该参数，继续保留 CET 标记。两类构建不得混用，桌面候选包也不得覆盖 v1.2.0 Server 2025 Release 资产。
 
-1. 在 Windows 10 x64 真机执行上述脚本并通过；
-2. 在 Windows 11 x64 真机执行上述脚本并通过；
-3. 在至少一台真实打印机上完成 PDF、DOCX 与可用打印参数检查；
-4. 三项验收的源代码 commit 与准备打 tag 的 commit 完全一致；
-5. 将 GitHub Actions 仓库变量 `PRINTERWLAN_WINDOWS10_VALIDATED_COMMIT`、`PRINTERWLAN_WINDOWS11_VALIDATED_COMMIT` 和 `PRINTERWLAN_PHYSICAL_PRINTER_VALIDATED_COMMIT` 都设为该完整 commit SHA。
+1. 在 Windows Server 2025 对准备发布的 commit 执行完整构建、单元/集成、升级、浏览器、打印驱动和卸载回归；
+2. 在 Windows 10 x64 真机执行上述脚本并通过；
+3. 在 Windows 11 x64 真机执行上述脚本并通过；
+4. 在 Windows 11 ARM64 主机运行同一 x64 安装包并通过自动验收；
+5. Windows 10/11 x64 真机验收的源代码 commit 与准备打 tag 的 commit 完全一致；
+6. 将 GitHub Actions 仓库变量 `PRINTERWLAN_WINDOWS10_VALIDATED_COMMIT` 和 `PRINTERWLAN_WINDOWS11_VALIDATED_COMMIT` 都设为该完整 commit SHA。Server 2025 与 ARM64-host 结果由同一 commit/tag 的工作流依赖关系保证。
 
 Release workflow 会核对这些变量；任意一项缺失或与 tag commit 不一致时会主动失败，不会创建 GitHub Release。

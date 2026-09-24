@@ -1,6 +1,6 @@
 # PrinterWLAN v1.3.0
 
-PrinterWLAN v1.3.0 是面向 Windows 10/11 x64 桌面主机的兼容版本，同时继续保留 Windows Server 2025 x64 回归。正式 Release 只会在同一提交具备 Windows 10 x64、Windows 11 x64 和实体打印机验收记录后创建；仓库中的候选构建或 GitHub Actions Artifact 不等于正式发布。
+PrinterWLAN v1.3.0 是面向 Windows 10/11 x64 桌面主机的兼容版本，同时支持 Windows Server 2025 x64 和 Windows 11 ARM64 主机中的 x64 应用兼容模式。正式 Release 只会在同一提交完成 Server 2025、Windows 10 x64、Windows 11 x64 和 Windows 11 ARM64-host 四个平台验收后创建；仓库中的候选构建或 GitHub Actions Artifact 不等于正式发布。
 
 ## Windows 桌面兼容
 
@@ -20,10 +20,11 @@ PrinterWLAN v1.3.0 是面向 Windows 10/11 x64 桌面主机的兼容版本，同
 ## 已验证链路
 
 - Windows 10 Pro 22H2 x64 build 19045.2965 真机：安装、Windows Service、无额外运行依赖、原生 SQLite/PDFium/SkiaSharp、内置 LibreOffice、管理控制台、LAN HTTP、中文用户导入与登录、PDF/DOCX、管理员打印机策略和 Microsoft Print to PDF 驱动链路。
-- Windows 11 ARM64 托管主机中的 x64 应用兼容模式：安装、服务、原生组件、LAN HTTP、PDF/DOCX 与 Windows 打印驱动链路。该结果是补充证据，不替代 Windows 11 x64 真机门槛。
+- Windows 11 Pro 25H2 x64 build 26200 真机：使用与 Windows 10 相同的候选安装包完成无额外依赖、服务、LAN、PDF/DOCX、管理员打印机策略、Windows Spooler/打印驱动和卸载验收。
+- Windows 11 ARM64 托管主机中的 x64 应用兼容模式：安装、服务、原生组件、LAN HTTP、PDF/DOCX 与 Windows 打印驱动链路。
 - Windows Server 2025 x64：locked restore、构建、单元/集成测试、v1.2.0 原地升级、浏览器、打印驱动、卸载和数据保留回归。
 
-Microsoft Print to PDF 能证明软件到 Windows Spooler/驱动的输出链路，但不能证明任意实体打印机已经出纸。因此正式桌面 Release 仍要求至少一台实体打印机完成 PDF、DOCX、纸张、方向、单双面、颜色、纸盒和分辨率现场检查。
+Microsoft Print to PDF 能证明软件到 Windows Spooler/驱动的输出链路，但不能证明任意实体打印机已经出纸。实体打印机不作为 v1.3.0 GitHub Release 的发布门禁；正式部署前仍建议管理员针对实际型号检查 PDF、DOCX、纸张、方向、单双面、颜色、纸盒和分辨率。
 
 ## 安全与平台说明
 

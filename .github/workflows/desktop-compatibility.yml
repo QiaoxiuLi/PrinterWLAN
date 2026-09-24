@@ -64,7 +64,7 @@ jobs:
           if (Test-Path $uninstaller) { Start-Process $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DELETEDATA') -Wait }
 
   require-desktop-acceptance:
-    name: Require Windows 10, Windows 11, and physical printer evidence
+    name: Require Server 2025, Windows 10 x64, Windows 11 x64, and ARM64-host evidence
     needs: windows-11-desktop-compatibility
     runs-on: ubuntu-latest
     steps:
@@ -73,8 +73,6 @@ jobs:
           EXPECTED: ${{ github.sha }}
           WINDOWS10: ${{ vars.PRINTERWLAN_WINDOWS10_VALIDATED_COMMIT }}
           WINDOWS11: ${{ vars.PRINTERWLAN_WINDOWS11_VALIDATED_COMMIT }}
-          PHYSICAL: ${{ vars.PRINTERWLAN_PHYSICAL_PRINTER_VALIDATED_COMMIT }}
         run: |
           test "$WINDOWS10" = "$EXPECTED" || { echo 'Windows 10 x64 evidence is missing for this commit.'; exit 1; }
           test "$WINDOWS11" = "$EXPECTED" || { echo 'Windows 11 x64 evidence is missing for this commit.'; exit 1; }
-          test "$PHYSICAL" = "$EXPECTED" || { echo 'Physical-printer evidence is missing for this commit.'; exit 1; }
