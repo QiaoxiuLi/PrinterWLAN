@@ -58,6 +58,26 @@ function Remove-SystemPdfPrinter {
   } while ((Get-Date) -lt $portCleanupDeadline)
 
   if ($remainingPorts.Count -gt 0) {
+    Restart-Service -Name Spooler -Force -ErrorAction Stop
+    (Get-Service -Name Spooler).WaitForStatus(
+      [System.ServiceProcess.ServiceControllerStatus]::Running,
+      [TimeSpan]::FromSeconds(30))
+
+    $portCleanupDeadline = (Get-Date).AddSeconds(15)
+    do {
+      foreach ($portName in $remainingPorts) {
+        Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue |
+          Remove-PrinterPort -ErrorAction SilentlyContinue
+      }
+      $remainingPorts = @($testPorts | Where-Object {
+        Get-PrinterPort -Name $_ -ErrorAction SilentlyContinue
+      })
+      if ($remainingPorts.Count -eq 0) { break }
+      Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $portCleanupDeadline)
+  }
+
+  if ($remainingPorts.Count -gt 0) {
     throw "Temporary Windows print ports were not removed: $($remainingPorts -join '; ')."
   }
 }
